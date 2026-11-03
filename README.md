@@ -3,8 +3,7 @@
 **One portal for the web interfaces of your switches – and a fix that makes the EDM of old
 Avaya/Extreme ERS switches work in today's browsers.**
 
-> Status: in development, see [docs/ROADMAP.md](docs/ROADMAP.md). The EDM proxy has been
-> verified against a mock of the switch web server, not yet against real hardware.
+> Status: in development, see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## What it does
 
