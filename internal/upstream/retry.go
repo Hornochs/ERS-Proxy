@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -44,9 +45,13 @@ func retryable(req *http.Request) bool {
 }
 
 // dropped reports whether the device closed or reset the connection before
-// sending an answer.
+// sending an answer. Depending on timing, net/http reports a connection the
+// server closed right away as EOF or as its unexported errServerClosedIdle
+// ("http: server closed idle connection"), which does not wrap io.EOF.
 func dropped(err error) bool {
-	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET)
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) ||
+		strings.Contains(err.Error(), "server closed idle connection")
 }
 
 type retryTransport struct {

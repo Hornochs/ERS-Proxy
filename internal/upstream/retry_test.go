@@ -3,11 +3,14 @@ package upstream
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -122,6 +125,19 @@ func TestEDMReadCommand(t *testing.T) {
 		"setVariables": false, "logout": false, "": false} {
 		if EDMReadCommand(cmd) != want {
 			t.Errorf("%q: want %v", cmd, want)
+		}
+	}
+}
+
+func TestDropped(t *testing.T) {
+	for err, want := range map[error]bool{
+		io.EOF: true,
+		fmt.Errorf("read: %w", syscall.ECONNRESET):        true,
+		errors.New("http: server closed idle connection"): true,
+		errors.New("dial tcp: i/o timeout"):               false,
+	} {
+		if dropped(err) != want {
+			t.Errorf("%v: want %v", err, want)
 		}
 	}
 }
