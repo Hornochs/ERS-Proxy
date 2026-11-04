@@ -451,3 +451,32 @@ func TestVOSSOverEDMWithoutIfTypeAndName(t *testing.T) {
 		t.Errorf("units %+v", snap.Units)
 	}
 }
+
+func TestSwOSAgainstSimulator(t *testing.T) {
+	s, d := collect(t, "swos")
+	if d.Name() != "swos" {
+		t.Fatalf("detected %s", d.Name())
+	}
+	if len(s.Units) != 1 || s.Units[0].Model != "CRS305-1G-4S+" || s.Units[0].Serial != "SYNTH0002" || s.Units[0].Firmware != "2.18" {
+		t.Fatalf("units %+v", s.Units)
+	}
+	p2 := port(t, s, 2)
+	if p2.Unit != 1 || p2.Number != 2 || p2.Name != "server-a" || !p2.Up() || p2.Speed != 10_000_000_000 || !p2.HasHC {
+		t.Errorf("port 2: %+v", p2)
+	}
+	if p3 := port(t, s, 3); p3.Up() || p3.Speed != 0 || p3.Number != 3 {
+		t.Errorf("port 3: %+v", p3)
+	}
+	if len(s.VLANs) != 0 || !strings.Contains(strings.Join(s.Notes, " "), "SwOS (web)") {
+		t.Errorf("VLANs %v, notes %v", s.VLANs, s.Notes)
+	}
+}
+
+func TestSwOSMatch(t *testing.T) {
+	d := SwOS{}
+	if d.Match(monitor.System{ObjectID: "1.3.6.1.4.1.14988.2"}) != 100 ||
+		d.Match(monitor.System{ObjectID: "1.3.6.1.4.1.14988.1", Descr: "RouterOS CRS326"}) != 0 ||
+		d.Match(monitor.System{Descr: "CSS610-8G-2S+ SwOS v2.18"}) != 90 {
+		t.Fatal("match")
+	}
+}

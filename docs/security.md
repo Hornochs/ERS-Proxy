@@ -73,7 +73,14 @@ ifIndex checked as a number).
 If a switch's EDM needs a browser feature that the sandbox forbids, an admin can set
 `isolation: off` for that device. The portal then shows a permanent warning for the device.
 
-Devices of kind `vsp-edm` (VSP switches with VOSS) are proxied exactly like ERS switches.
+Devices of kind `vsp-edm` (VSP switches with VOSS) and `swos` (MikroTik SwOS) are proxied
+exactly like ERS switches. For `swos` devices ERS-Proxy also logs in on the server: SwOS uses
+HTTP Digest, and the proxy answers the switch's challenge with the stored web login. The
+browser's own `Authorization` header is never forwarded and the switch's `WWW-Authenticate`
+header never reaches the browser, so neither a browser login dialog nor the password is
+involved in the browser. Content of the sandboxed SwOS page can use the stored login only for
+requests to its own switch below its own token path – which is what opening the device grants
+anyway. Without a stored login a `swos` device is not opened.
 Devices of kind `link` and `edm-direct` (VSP switches opened directly) are not proxied: the browser loads them from their own origin, never under the portal's, so this
 section does not apply to them. For `edm-direct` devices ERS-Proxy only reads from the EDM
 itself (EDM data source) with the pinned certificate and the stored login (T5, T6).
@@ -111,7 +118,12 @@ itself (EDM data source) with the pinned certificate and the stored login (T5, T
   RSA key exchange, AES-CBC, 3DES, RC4) only if the switch supports nothing better. The device
   page shows the negotiated version and cipher and warns below TLS 1.2.
 - With HTTP the connection is unencrypted, including the EDM login. The portal marks such
-  devices.
+  devices. SwOS speaks HTTP only; its Digest login does not send the password itself, but MD5
+  Digest can be attacked offline from a captured exchange – keep SwOS switches in a management
+  network.
+- The SwOS data source sends only GET requests for six read-only files and never asks for
+  `snmp.b` (which contains the SNMP community); a test checks that the reader contains no write
+  methods.
 
 ### Switch sessions (T7)
 
@@ -127,5 +139,6 @@ itself (EDM data source) with the pinned certificate and the stored login (T5, T
   access to the logs.
 - **Legacy TLS.** TLS 1.0 with RC4 or 3DES is weak. Use a management network.
 - **Users can do what EDM allows.** ERS-Proxy does not restrict what a logged-in user does
-  inside a switch's EDM; that is decided by the switch account.
+  inside a switch's EDM; that is decided by the switch account. SwOS has only one account with
+  full rights, so every portal user who can open a `swos` device can change that switch.
 - **`isolation: off`** removes the protection against T4 for that device.

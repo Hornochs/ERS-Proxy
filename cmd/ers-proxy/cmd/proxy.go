@@ -13,8 +13,10 @@ import (
 	"github.com/lan-dot-party/ers-proxy/internal/edmproxy"
 	"github.com/lan-dot-party/ers-proxy/internal/monitor"
 	"github.com/lan-dot-party/ers-proxy/internal/monitor/edmsrc"
+	"github.com/lan-dot-party/ers-proxy/internal/monitor/swossrc"
 	"github.com/lan-dot-party/ers-proxy/internal/secret"
 	"github.com/lan-dot-party/ers-proxy/internal/store"
+	"github.com/lan-dot-party/ers-proxy/internal/swos"
 	"github.com/lan-dot-party/ers-proxy/internal/web"
 )
 
@@ -72,6 +74,25 @@ func (e *edmSessions) open(ctx context.Context, d *store.Device) (monitor.Reader
 func newEDMSource(p *edmproxy.Proxy, key *secret.Key) func(ctx context.Context, d *store.Device) (monitor.Reader, func(), error) {
 	e := &edmSessions{proxy: p, key: key, m: map[int64]edmEntry{}}
 	return e.open
+}
+
+// newSwOSSource returns the poller.OpenFunc of the SwOS data source. It uses
+// the proxy's client of the device, which logs in with the stored web login
+// (HTTP Digest); SwOS has no sessions to keep.
+func newSwOSSource(p *edmproxy.Proxy) func(ctx context.Context, d *store.Device) (monitor.Reader, func(), error) {
+	return func(_ context.Context, d *store.Device) (monitor.Reader, func(), error) {
+		if !d.SwOS() {
+			return nil, nil, errors.New("the SwOS data source needs a device of kind swos")
+		}
+		if !d.HasCredentials() {
+			return nil, nil, errors.New("the SwOS data source needs a stored web login (device settings)")
+		}
+		c, err := p.Client(d)
+		if err != nil {
+			return nil, nil, err
+		}
+		return &swossrc.Reader{C: &swos.Client{Transport: c.Transport, Base: c.Base().String()}}, func() {}, nil
+	}
 }
 
 func newProxy(ctx context.Context, a *app.App, ui *web.Server) (*edmproxy.Proxy, error) {

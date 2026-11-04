@@ -58,6 +58,7 @@ var serverCmd = &cobra.Command{
 		ui.Health = checker
 		mon := poller.New(e.db, e.key, monitor.NewRegistry(drivers.All()...), log)
 		mon.OpenEDM = newEDMSource(proxy, e.key)
+		mon.OpenSwOS = newSwOSSource(proxy)
 		rec := history.New(e.db, e.cfg.Monitor.Retention, log)
 		mon.Sink = rec
 		ui.Monitor = mon

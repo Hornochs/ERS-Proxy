@@ -74,7 +74,7 @@ func Normalize(d *store.Device) error {
 		return err
 	}
 	switch d.Kind {
-	case store.KindERS, store.KindVSP:
+	case store.KindERS, store.KindVSP, store.KindSwOS:
 		u, err := normalizeBase(d.URL)
 		if err != nil {
 			return err
@@ -97,7 +97,7 @@ func Normalize(d *store.Device) error {
 		// Isolation and TLS settings only apply to proxied devices.
 		d.Isolation, d.TLSMode, d.TLSPin = store.IsolationSandbox, store.TLSAuto, ""
 	default:
-		return fieldErr("kind", "kind %q: want ers-edm, vsp-edm, edm-direct or link", d.Kind)
+		return fieldErr("kind", "kind %q: want ers-edm, vsp-edm, edm-direct, swos or link", d.Kind)
 	}
 	return nil
 }
@@ -114,16 +114,21 @@ func normalizeMonitoring(d *store.Device) error {
 		if !d.EDM() {
 			return fieldErr("monitor_source", "the EDM data source needs a device of kind ers-edm, vsp-edm or edm-direct")
 		}
+	case store.MonitorSwOS:
+		if !d.SwOS() {
+			return fieldErr("monitor_source", "the SwOS data source needs a device of kind swos")
+		}
 	default:
-		return fieldErr("monitor_source", "monitor source %q: want none, snmp or edm", d.MonitorSource)
+		return fieldErr("monitor_source", "monitor source %q: want none, snmp, edm or swos", d.MonitorSource)
 	}
 	if d.MonitorDriver == "" {
 		d.MonitorDriver = store.DriverAuto
 	}
 	switch d.MonitorDriver {
-	case store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS:
+	case store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS,
+		store.DriverSwOS:
 	default:
-		return fieldErr("monitor_driver", "monitor driver %q: want auto, generic, ers, cisco, tplink or voss", d.MonitorDriver)
+		return fieldErr("monitor_driver", "monitor driver %q: want auto, generic, ers, cisco, tplink, voss or swos", d.MonitorDriver)
 	}
 	if d.MonitorInterval == 0 {
 		d.MonitorInterval = DefaultMonitorInterval
@@ -176,7 +181,7 @@ func parseHTTPURL(raw string) (*url.URL, error) {
 }
 
 // normalizeBase returns scheme://host[:port] for a proxied switch. A path is
-// not allowed: EDM always lives at the root of the switch's web server.
+// not allowed: EDM and SwOS always live at the root of the web server.
 func normalizeBase(raw string) (string, error) {
 	u, err := parseHTTPURL(raw)
 	if err != nil {

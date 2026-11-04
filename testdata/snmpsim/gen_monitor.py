@@ -5,7 +5,8 @@
 
 writes generic.snmprec (a Q-BRIDGE switch), ers5600.snmprec (an ERS 5600
 two-unit stack with RAPID-CITY VLANs and no Q-BRIDGE), cisco.snmprec (VTP) and
-tplink.snmprec (Q-BRIDGE) and voss.snmprec (VSP 4850GTS on VOSS 7.1). All values are made up;
+tplink.snmprec (Q-BRIDGE), voss.snmprec (VSP 4850GTS on VOSS 7.1) and
+swos.snmprec (MikroTik CRS305 on SwOS 2.18). All values are made up;
 only the OIDs are real. The community of each agent is its file name.
 """
 import os
@@ -318,6 +319,24 @@ def voss():
     a.write("voss.snmprec")
 
 
+def swos():
+    """MikroTik CRS305-1G-4S+ on SwOS 2.18 as seen on real hardware: system
+    group, IF-MIB (ifName = ifDescr = the configured port name), BRIDGE-MIB
+    without Q-BRIDGE, MikroTik serial and firmware scalars. No EtherLike, LAG,
+    LLDP or VLAN objects."""
+    a = Agent()
+    system(a, "CRS305-1G-4S+ SwOS v2.18", "1.3.6.1.4.1.14988.2", "swos-lab")
+    a.s("1.3.6.1.4.1.14988.1.1.7.3.0", "SYNTH0002")
+    a.s("1.3.6.1.4.1.14988.1.1.7.4.0", "2.18")
+    # (ifIndex, name, link up, Mbit/s)
+    ports = [(1, "office", True, 1000), (2, "server-a", True, 10000), (3, "server-b", False, 0),
+             (4, "spare", False, 0), (5, "uplink", True, 10000)]
+    for idx, name, up, mbps in ports:
+        interface(a, idx, name, name, 6, up, mbps, in_octets=idx * 1000000, out_octets=idx * 2000000)
+        a.i(f"1.3.6.1.2.1.17.1.4.1.2.{idx}", idx)
+    a.write("swos.snmprec")
+
+
 def demo(source, target):
     """A copy of an agent with growing counters (snmpsim "numeric" variation),
     for demonstrations: traffic between about 1 and 80 Mbit/s per port."""
@@ -344,5 +363,6 @@ if __name__ == "__main__":
     tplink()
     tplink_qbridge()
     voss()
+    swos()
     demo("ers5600.snmprec", "demo-ers5600.snmprec")
     demo("generic.snmprec", "demo-generic.snmprec")

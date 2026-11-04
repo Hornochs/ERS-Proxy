@@ -35,13 +35,13 @@ In the device form (admin), section **Monitoring**:
 
 | Field | Meaning |
 |---|---|
-| Source | `none` (default), `snmp`, or `edm` (see below). |
-| Driver | `auto` detects the driver from `sysObjectID` once per polling loop; or fix `generic`, `ers`, `cisco`, `tplink` or `voss`. See [compatibility.md](compatibility.md). |
+| Source | `none` (default), `snmp`, `edm` or `swos` (see below). |
+| Driver | `auto` detects the driver from `sysObjectID` once per polling loop; or fix `generic`, `ers`, `cisco`, `tplink`, `voss` or `swos`. See [compatibility.md](compatibility.md). |
 | Interval | 30–3600 seconds, default 60. |
 | SNMP port | Port 161 by default. |
 
 The SNMP host is the host of the device URL. The SNMP version and the credentials are entered
-together: when adding a device (optional, section **SNMP access** of the form) or later in the
+together: when adding a device (optional, section **Credentials** of the form, together with the switch login) or later in the
 card **SNMP access** on the edit page. Switching the version there (v2c ↔ v3) replaces the
 stored credentials; the form shows only the fields of the chosen version and security level.
 
@@ -91,6 +91,30 @@ objects through the switch's web interface (`getFormMibs.jsp`, `getTableMibs.jsp
   poll with `HTTP 503` or refuse connections for a few seconds (the next poll works).
 
 Prefer SNMP whenever it is available.
+
+### SwOS source (MikroTik)
+
+SwOS's SNMP agent reports ports, link, speed and traffic, but no VLANs, no duplex and no LAGs.
+The source `swos` reads them from the web API that SwOS's own web interface uses (`sys.b`,
+`link.b`, `fwd.b`, `vlan.b`, `lacp.b`, `stats.b`). It
+
+- works only for devices of kind `swos` and needs the device's stored **web login** (the same
+  one the proxy uses; SwOS has only the account `admin`);
+- sends only GET requests for these six files – never `snmp.b` (it holds the SNMP community)
+  and never the POSTs SwOS uses to apply settings;
+- logs in with HTTP Digest on the server; SwOS keeps no session, so nothing has to be logged
+  out;
+- names ports like SwOS does (`ifName` = `ETH/BOOT`, `SFP1`, … , `ifAlias` = the configured
+  name; with SNMP the configured name is the port name);
+- derives the tagging per VLAN, which SwOS does not store: a member port sends its default VLAN
+  untagged and other VLANs tagged; a port set to "VLAN Receive: only tagged" is shown as a trunk
+  with all VLANs tagged; ports with "VLAN Mode: disabled" get no VLAN data;
+- shows LAGs as "Trunk1" … "Trunk15";
+- works with an interval of 30 seconds or more.
+
+Verified on a CRS305-1G-4S+ with SwOS 2.18: ports, speed, duplex, VLANs, PVID and traffic match
+SNMP and SwOS's own pages. LAGs and PoE were not configured on the tested switch; PoE is not
+read.
 
 SNMP and the EDM data source use the host of the device's address (`url`) – the same address the
 web interface is reached at. For devices whose management address differs from the address of

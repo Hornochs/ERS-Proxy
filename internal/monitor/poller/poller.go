@@ -1,5 +1,5 @@
-// Package poller runs one loop per monitored device: open a reader (SNMP or
-// EDM), let the driver collect a snapshot, compute rates and events against
+// Package poller runs one loop per monitored device: open a reader (SNMP,
+// EDM or SwOS), let the driver collect a snapshot, compute rates and events against
 // the previous snapshot, and hand everything to the history sink.
 package poller
 
@@ -56,6 +56,8 @@ type Poller struct {
 	Sink     Sink
 	// OpenEDM opens the EDM reader for source "edm" (nil: not available).
 	OpenEDM OpenFunc
+	// OpenSwOS opens the SwOS web reader for source "swos" (nil: not available).
+	OpenSwOS OpenFunc
 	// Timeout of one poll (SNMP requests are retried inside).
 	Timeout time.Duration
 
@@ -269,6 +271,11 @@ func (p *Poller) open(ctx context.Context, d *store.Device) (monitor.Reader, fun
 			return nil, nil, errors.New("the EDM data source is not available")
 		}
 		return p.OpenEDM(ctx, d)
+	case store.MonitorSwOS:
+		if p.OpenSwOS == nil {
+			return nil, nil, errors.New("the SwOS data source is not available")
+		}
+		return p.OpenSwOS(ctx, d)
 	}
 	return nil, nil, fmt.Errorf("unknown source %q", d.MonitorSource)
 }

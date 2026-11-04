@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The device list has a single *Add switch* button instead of *Add ERS switch* and *Add link*;
+  the kind is chosen in the form.
+- The new-device form takes the switch login (auto-login, SwOS web login, EDM/SwOS data source)
+  together with SNMP access, confirmed with one password entry.
+
 ### Fixed
 
 - "Open in EDM" for a port left `TypeError` messages in the console on VOSS 8 while EDM was
@@ -71,6 +78,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ports; the synthetic `ers5600` fixture now contains such a port.
 
 ### Added
+
+- MikroTik SwOS switches (step 7.14), verified read-only on a CRS305-1G-4S+ with SwOS 2.18:
+  - Device kind `swos`: SwOS's web interface embedded through the proxy. ERS-Proxy logs in with
+    the stored web login (HTTP Digest, `upstream.Options.Login`); the browser never sees the
+    password or a login dialog. The shim maps SwOS's absolute XHR paths below the proxy path.
+  - Port dashboard driver `swos` (detected by `sysObjectID` 1.3.6.1.4.1.14988.2): ports, speed and
+    traffic over SNMP, model, serial number and firmware from MIKROTIK-MIB.
+  - Data source `swos` (`internal/swos`, `internal/monitor/swossrc`): reads SwOS's web API (GET
+    of six read-only files) for VLANs, PVID, tagging, duplex and LAGs, which SwOS's SNMP agent
+    does not provide. Port names follow SwOS (`ETH/BOOT`, `SFP1`, …).
+- The proxy no longer forwards the browser's `Authorization` header to any switch and drops
+  `WWW-Authenticate` from switch answers.
 
 - Browser test `tools/e2e/edm_e2e.py` also runs in Firefox (`E2E_BROWSER=firefox`, geckodriver;
   JavaScript errors through WebDriver BiDi) and WebKitGTK, Safari's engine (`E2E_BROWSER=webkit`,

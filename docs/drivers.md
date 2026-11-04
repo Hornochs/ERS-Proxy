@@ -11,7 +11,8 @@ poller ──> Driver.Collect(ctx, Reader) ──> *monitor.Snapshot ──> Rat
                           │
               Reader (by MIB object name)
               ├── snmpsrc  (SNMP GET/walk; names -> OIDs via monitor.Objects)
-              └── edmsrc   (EDM getFormMibs/getTableMibs; ERS only, experimental)
+              ├── edmsrc   (EDM getFormMibs/getTableMibs; ERS and VSP, experimental)
+              └── swossrc  (MikroTik SwOS web API, served under standard object names)
 ```
 
 - **Reader** (`internal/monitor/monitor.go`) reads objects by MIB name:
@@ -33,7 +34,7 @@ poller ──> Driver.Collect(ctx, Reader) ──> *monitor.Snapshot ──> Rat
   - `SkipPoE` leaves POWER-ETHERNET-MIB out; a driver with a vendor PoE table calls
     `Base.ReadPoE` only when that table is missing (`tplink` does this).
 - **`Driver`** interface:
-  - `Name()`: the identifier stored with a device (`generic`, `ers`, `cisco`, `tplink`, `voss`).
+  - `Name()`: the identifier stored with a device (`generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`).
   - `Match(System) int`: how well the driver fits. `0` not at all, `10` generic fallback, `90`
     probably (for example by `sysDescr`), `100` made for this vendor (by `sysObjectID` prefix).
   - `Collect(ctx, Reader) (*Snapshot, error)`.
@@ -94,7 +95,7 @@ VLANs on the wrong ports.
    }
    ```
    Look at `generic.go` (Q-BRIDGE), `tplink.go` (vendor table with text port lists), `cisco.go` (vendor VLAN tables
-   with Q-BRIDGE fallback) `ers.go` (own numbering, PortSet bitmaps, stack units) and `voss.go` (slot/port from `ifName`, reuses the ERS RAPID-CITY helpers). A failing
+   with Q-BRIDGE fallback) `ers.go` (own numbering, PortSet bitmaps, stack units), `voss.go` (slot/port from `ifName`, reuses the ERS RAPID-CITY helpers) and `swos.go` (standard MIBs only; VLANs come from a reader that translates a web API, see below). A failing
    optional read should add a note and keep going; only a missing system group or interface
    table is an error.
 4. **Register** it in `drivers.All()` (`generic.go`). Give `Match` a score of 100 for the
@@ -130,6 +131,17 @@ VLANs on the wrong ports.
 9. **Document** the driver in the "Port dashboard drivers" table of
    [compatibility.md](compatibility.md): detection, data used, and how it was verified
    (synthetic fixtures only, or a named model and firmware on real hardware).
+
+## Readers that translate a vendor API
+
+When a vendor keeps data only in its web interface, a reader can translate it into the standard
+object names, so that drivers stay independent of the transport. `swossrc` does this for
+MikroTik SwOS: it loads the switch's state once per poll (`internal/swos`) and serves it as
+system group, IF-MIB, `dot3StatsDuplexStatus`, `dot1dBasePortIfIndex`,
+`dot3adAggPortAttachedAggID` (128 + trunk number) and Q-BRIDGE (`dot1qPvid`,
+`dot1qVlanStaticName`, current egress/untagged port lists). Whatever the vendor does not store
+(SwOS has no per-VLAN tagging) is derived in the reader and documented there; the driver adds a
+note to the snapshot. The `swos` driver then works the same over SNMP and over the web API.
 
 ## Rules
 

@@ -112,8 +112,16 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request) {
 		s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, fieldKey(err))
 		return
 	}
-	// SNMP access can be entered right away. It is checked before the device
-	// is created; it can only be encrypted once the device has its ID.
+	// The switch login and SNMP access can be entered right away. They are
+	// checked before the device is created; they can only be encrypted once
+	// the device has its ID (associated data).
+	login := devices.Credentials{Username: strings.TrimSpace(r.PostFormValue("login_username")),
+		Password: r.PostFormValue("login_password")}
+	withLogin := d.Upstream() && (login.Username != "" || login.Password != "")
+	if withLogin && (login.Username == "" || login.Password == "") {
+		s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "login_missing")
+		return
+	}
 	version, snmpCreds, withSNMP := readSNMP(r, d.SNMPVersion)
 	if withSNMP {
 		d.SNMPVersion = version
@@ -121,16 +129,27 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request) {
 			s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "snmp_invalid")
 			return
 		}
-		if !s.confirmPassword(r) {
-			s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "wrong_password")
-			return
-		}
+	}
+	if (withLogin || withSNMP) && !s.confirmPassword(r) {
+		s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "wrong_password")
+		return
 	}
 	if err := s.DB.CreateDevice(r.Context(), d); err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	s.Audit(r, "device.create", d.Name, d.Kind+" "+d.URL)
+	if withLogin {
+		enc, err := devices.EncryptCredentials(s.Key, d, login)
+		if err == nil {
+			err = s.DB.SetDeviceCredentials(r.Context(), d.ID, enc)
+		}
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		s.Audit(r, "device.credentials.set", d.Name, "") // never the values
+	}
 	if withSNMP {
 		enc, err := devices.EncryptSNMP(s.Key, d, snmpCreds)
 		if err == nil {

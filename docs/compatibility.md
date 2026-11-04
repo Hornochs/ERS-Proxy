@@ -34,6 +34,30 @@ proxy path). Differences to ERS switches:
   beyond that until idle sessions expire (about 20–25 minutes on the tested switch). The EDM
   data source keeps one session.
 
+## MikroTik switches with SwOS (kind `swos`)
+
+| Model | Firmware | Transport | Status | Verified how |
+|---|---|---|---|---|
+| CRS305-1G-4S+ | SwOS 2.18 | HTTP only | works | Hardware test 2026-11-04 in Chromium 156 and Firefox ESR 153, read-only: web interface embedded through the proxy with the stored login (all tabs listed, link table loaded, every request below `/d/{token}/`, no console errors); SNMP and SwOS data source of the port dashboard (`swos` driver) |
+| other SwOS switches (CSS610, CSS326, CRS3xx) | SwOS 2.x | HTTP only | expected to work | Same web API; the VLAN tagging of older SwOS versions with a per-port "VLAN Header" setting is not interpreted |
+
+SwOS's web interface works in current browsers; the proxy is there for the login and for one
+portal. Differences to EDM:
+
+- **Login:** HTTP Digest (MD5, `qop=auth`) for every data file; the page itself (`/index.html`)
+  needs none. ERS-Proxy answers the challenge on the server with the stored web login and signs
+  later requests in advance with the last nonce (SwOS keeps the nonce for a long time). The
+  browser never gets a `WWW-Authenticate` header, so it shows no login dialog, and its own
+  `Authorization` header is never forwarded. Without a stored login the device is not opened.
+- **Absolute paths:** the page loads its data with `XMLHttpRequest` from `/sys.b`, `/link.b` …;
+  the shim maps such paths below `/d/{token}/` for `swos` devices. The answers are JavaScript
+  object literals that the page evaluates with `eval`, which the sandbox allows.
+- **Logout:** SwOS's *Logout* posts to `/logout` and reloads the page; through the proxy the
+  stored login is used again right away. The proxy session is not reused afterwards.
+- **SNMP:** system group, IF-MIB (`ifName` = `ifDescr` = the configured port name), BRIDGE-MIB
+  without Q-BRIDGE, MIKROTIK-MIB serial number, firmware version and SFP table. No VLANs, no
+  EtherLike, no LLDP. `sysObjectID` is `1.3.6.1.4.1.14988.2`.
+
 Other ERS families with the same EDM (Ext JS 2.2) – for example ERS 3500, 4000/4800, 5500 and
 5900 – are expected to need the same patches. Patches match file content, not paths or
 versions, so they apply wherever the affected code appears. Please report results with the
@@ -51,6 +75,8 @@ fallback). All drivers are read-only.
 | `cisco` | `1.3.6.1.4.1.9.` | standard MIBs plus CISCO-VTP-MIB (VLANs, trunks) and CISCO-VLAN-MEMBERSHIP-MIB (`vmVlan`); Q-BRIDGE fallback without VTP | synthetic fixtures only |
 | `voss` | `1.3.6.1.4.1.2272.` (RAPID-CITY: VSP, also older ERS 8000) or `sysDescr` starting with `VSP-` | standard MIBs plus RAPID-CITY VLANs (`rcVlanPortMembers`, PVID, tagging), port speed/duplex (`rcPortTable`) and MLT; front-panel slot/port from `ifName` (`1/1`, ifIndex 192 = 1/1); chassis serial and release from `rcChasSerialNumber`/`sysDescr` | VSP 4850GTS (VOSS 7.1.10.0) over SNMP and EDM: ports, speed/duplex, VLANs, PVID, tagging, LLDP. MLT membership and channelized ports not yet verified |
 | `tplink` | `1.3.6.1.4.1.11863.` | standard MIBs plus TPLINK-DOT1Q-VLAN-MIB (port table: PVID, LAG; VLAN table: names, tagged/untagged port lists as text); front-panel ports from `ifName`; Q-BRIDGE fallback | T1500G-8T and Omada SG2210P (firmware 5.20): ports, PVID, tagging, LAG, LLDP; PoE (status, class, power per port, budget) from TPLINK-POWER-OVER-ETHERNET-MIB, POWER-ETHERNET-MIB as fallback. The SNMP agents are slow and drop requests: a poll takes 30–60 s |
+
+| `swos` | `1.3.6.1.4.1.14988.2` (MikroTik SwOS) or `sysDescr` containing `SwOS` | SNMP: IF-MIB and MIKROTIK-MIB serial/firmware; front-panel number = ifIndex. With the `swos` data source also VLANs, PVID, derived tagging, duplex and LAGs ("Trunk1"…) from SwOS's web API, served as Q-BRIDGE, EtherLike and IEEE8023-LAG objects | CRS305-1G-4S+ (SwOS 2.18) over SNMP and the SwOS data source: ports, speed, duplex, VLANs, PVID, traffic. LAG membership and the tagging of hybrid ports not yet seen on hardware |
 
 Please attach `ers-proxy snmp-capture` output to a device report to get a driver verified.
 
@@ -102,6 +128,6 @@ RSA keys below 1024 bits are rejected by Go. If a switch uses one, start ERS-Pro
 
 The portal and the proxied EDM are tested with Chromium (156), Firefox (ESR 153) and WebKitGTK
 (2.54, the engine of Safari) through Selenium: the ERS EDM against the mock switch, VOSS's EDM
-on real VSPs. Safari itself adds its own privacy rules (Intelligent Tracking Prevention); they
+on real VSPs, SwOS on a real CRS305 (Chromium and Firefox). Safari itself adds its own privacy rules (Intelligent Tracking Prevention); they
 should not matter because everything runs under the portal's origin, but Safari on macOS has
 not been tested yet. Edge (Chromium) is expected to work; please report problems.

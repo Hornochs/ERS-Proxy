@@ -24,15 +24,22 @@ _Last updated: 2026-11-04_
 | 4 – Health checks | done |
 | 5 – Auto-login (experimental) | done (mock only) |
 | 6 – Hardware and 1.0 | in progress (6.1 partly) |
-| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P; stacks pending) |
+| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS; stacks pending) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.13.
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.14.
 
 **Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
 ERS (verified against the mock and on the VSPs), and
 "Open in EDM" for a port on an ERS (verified on the VSP only), SNMPv3 with authPriv on a real
 switch (snmpsim cannot test it), see
 [hardware-tests.md](hardware-tests.md). Then 6.2.
+
+**Verified on hardware (2026-11-04, step 7.14):** MikroTik CRS305-1G-4S+ with SwOS 2.18, read-only.
+New device kind `swos` (web interface through the proxy, server-side HTTP Digest login), driver
+`swos` and data source `swos` (SwOS's web API, because its SNMP agent has no VLANs, duplex or
+LAGs). Interface embedded in Chromium and Firefox; SNMP and SwOS source give the same ports and
+rates, the SwOS source also VLANs, PVID, tagging and duplex. Not seen on hardware yet: LAGs,
+hybrid ports ("VLAN Receive: any"), SwOS PoE models.
 
 **Verified on hardware (2026-11-04, step 7.13):** VSP 4850GTS as `vsp-edm`, embedded through the
 proxy in Chromium: auto-login and manual login, dialogs, a write (reverted), EDM's logout. Fixed
@@ -203,6 +210,9 @@ Never write to a device: no SNMP sets, no EDM `setVariables`.
   4850GTS (VOSS 7.1.10.0).*
 - **7.13 VSP through the proxy.** Device kind `vsp-edm`: VOSS's EDM embedded through the proxy
   with auto-login; Web Storage for the sandbox in the shim. *Done: verified on the VSP 4850GTS.*
+- **7.14 MikroTik SwOS.** Device kind `swos` (web interface through the proxy, HTTP Digest login
+  on the server), driver `swos`, data source `swos` (SwOS's web API for VLANs, duplex and LAGs).
+  *Done: verified read-only on a CRS305-1G-4S+ (SwOS 2.18).*
 
 ## Later
 

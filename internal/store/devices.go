@@ -21,6 +21,10 @@ const (
 	// (VSP with VOSS): the browser opens it directly like a link, while the
 	// server still talks to its EDM for the dashboard's EDM data source.
 	KindEDMDirect = "edm-direct"
+	// KindSwOS is a MikroTik switch with SwOS whose web interface is served
+	// through the proxy; the proxy logs in with the stored web login (HTTP
+	// Digest), the browser never sees the password.
+	KindSwOS = "swos"
 )
 
 // Isolation modes for proxied devices.
@@ -41,6 +45,8 @@ const (
 	MonitorNone = "none"
 	MonitorSNMP = "snmp"
 	MonitorEDM  = "edm"
+	// MonitorSwOS reads SwOS's web API (swos devices only).
+	MonitorSwOS = "swos"
 )
 
 // Monitoring drivers.
@@ -51,6 +57,7 @@ const (
 	DriverCisco   = "cisco"
 	DriverTPLink  = "tplink"
 	DriverVOSS    = "voss"
+	DriverSwOS    = "swos"
 )
 
 // SNMP versions.
@@ -92,7 +99,7 @@ type Device struct {
 	HealthEnabled bool
 	Notes         string
 	Sort          int
-	// MonitorSource is none, snmp or edm; MonitorDriver auto, generic, ers, cisco or tplink.
+	// MonitorSource is none, snmp, edm or swos; MonitorDriver auto or a driver name.
 	MonitorSource   string
 	MonitorDriver   string
 	MonitorInterval int // seconds
@@ -110,8 +117,9 @@ func (d *Device) HasCredentials() bool { return len(d.Credentials) > 0 }
 // HasSNMPCredentials reports whether SNMP credentials are stored.
 func (d *Device) HasSNMPCredentials() bool { return len(d.SNMPCredentials) > 0 }
 
-// Proxied reports whether the device is served through the EDM proxy.
-func (d *Device) Proxied() bool { return d.Kind == KindERS || d.Kind == KindVSP }
+// Proxied reports whether the device is served through the proxy (ers-edm,
+// vsp-edm and swos).
+func (d *Device) Proxied() bool { return d.Kind == KindERS || d.Kind == KindVSP || d.Kind == KindSwOS }
 
 // VOSS reports whether the device runs VOSS (vsp-edm and edm-direct): its
 // web server resets connections it is asked to close.
@@ -121,10 +129,17 @@ func (d *Device) VOSS() bool { return d.Kind == KindVSP || d.Kind == KindEDMDire
 // edm-direct devices).
 func (d *Device) Direct() bool { return d.Kind == KindLink || d.Kind == KindEDMDirect }
 
-// EDM reports whether the server talks to the device's EDM: TLS settings,
-// certificate pin, stored login and the EDM data source apply (ers-edm,
-// vsp-edm and edm-direct devices).
-func (d *Device) EDM() bool { return d.Proxied() || d.Kind == KindEDMDirect }
+// EDM reports whether the device has an EDM: the EDM data source and "Open
+// in EDM" for a port apply (ers-edm, vsp-edm and edm-direct devices).
+func (d *Device) EDM() bool { return d.Kind == KindERS || d.Kind == KindVSP || d.Kind == KindEDMDirect }
+
+// Upstream reports whether the server talks to the device's web server
+// itself: TLS settings, the certificate pin and the stored login apply
+// (proxied devices and edm-direct).
+func (d *Device) Upstream() bool { return d.Proxied() || d.Kind == KindEDMDirect }
+
+// SwOS reports whether the device is a MikroTik switch with SwOS.
+func (d *Device) SwOS() bool { return d.Kind == KindSwOS }
 
 const deviceCols = `d.id, COALESCE(d.group_id, 0), COALESCE(g.name, ''), d.name, d.kind, d.url, d.open_mode, d.isolation,
 	d.tls_mode, d.tls_pin, d.tls_profile, d.credentials, d.auto_login, d.health_enabled, d.notes, d.sort,

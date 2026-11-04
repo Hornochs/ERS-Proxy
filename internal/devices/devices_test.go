@@ -367,3 +367,37 @@ func TestEDMDirectExportImport(t *testing.T) {
 		t.Fatalf("round trip: %+v", d)
 	}
 }
+
+func TestNormalizeSwOS(t *testing.T) {
+	d := &store.Device{Name: "crs", Kind: store.KindSwOS, URL: "192.0.2.30", MonitorSource: store.MonitorSwOS,
+		MonitorDriver: store.DriverSwOS}
+	if err := Normalize(d); err != nil || d.URL != "http://192.0.2.30" {
+		t.Fatalf("swos: %v %q", err, d.URL)
+	}
+	if !d.Proxied() || !d.Upstream() || d.EDM() || d.Direct() || d.VOSS() || !d.SwOS() {
+		t.Fatal("kind helpers for swos")
+	}
+	if err := Normalize(&store.Device{Name: "x", Kind: store.KindSwOS, URL: "http://192.0.2.30/index.html"}); err == nil {
+		t.Fatal("path accepted")
+	}
+	var fe *FieldError
+	for _, kind := range []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindLink} {
+		x := &store.Device{Name: "x", Kind: kind, URL: "http://192.0.2.31/", MonitorSource: store.MonitorSwOS}
+		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
+			t.Errorf("swos source on %s: %v", kind, err)
+		}
+	}
+	// The EDM source is not available for SwOS switches.
+	x := &store.Device{Name: "x", Kind: store.KindSwOS, URL: "192.0.2.30", MonitorSource: store.MonitorEDM}
+	if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
+		t.Fatalf("edm source on swos: %v", err)
+	}
+	for _, kind := range []string{store.KindERS, store.KindVSP, store.KindEDMDirect} {
+		if !(&store.Device{Kind: kind}).Upstream() {
+			t.Errorf("%s: Upstream false", kind)
+		}
+	}
+	if (&store.Device{Kind: store.KindLink}).Upstream() {
+		t.Error("link: Upstream true")
+	}
+}

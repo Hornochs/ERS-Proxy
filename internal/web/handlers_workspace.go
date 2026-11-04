@@ -163,7 +163,7 @@ func (s *Server) deviceTrust(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !d.EDM() || !strings.HasPrefix(d.URL, "https://") {
+	if !d.Upstream() || !strings.HasPrefix(d.URL, "https://") {
 		s.errorPage(w, r, http.StatusNotFound, "error.not_found")
 		return
 	}

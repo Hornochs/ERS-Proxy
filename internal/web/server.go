@@ -100,13 +100,15 @@ func New(a *app.App) (*Server, error) {
 }
 
 var funcs = template.FuncMap{
-	"themes":         func() []string { return store.Themes },
-	"hasPrefix":      strings.HasPrefix,
-	"openModes":      func() []string { return []string{config.OpenEmbedded, config.OpenTab, config.OpenWindow} },
-	"tlsModes":       func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
-	"monitorSources": func() []string { return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM} },
+	"themes":    func() []string { return store.Themes },
+	"hasPrefix": strings.HasPrefix,
+	"openModes": func() []string { return []string{config.OpenEmbedded, config.OpenTab, config.OpenWindow} },
+	"tlsModes":  func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
+	"monitorSources": func() []string {
+		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS}
+	},
 	"monitorDrivers": func() []string {
-		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS}
+		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS}
 	},
 	"snmpVersions":   func() []string { return snmp.Versions },
 	"securityLevels": func() []string { return snmp.SecurityLevels },
