@@ -66,6 +66,13 @@ const (
 	SNMPv3  = "v3"
 )
 
+// Configuration sources: how the proxy changes settings on a switch.
+const (
+	ConfigNone = "none"
+	ConfigEDM  = "edm"
+	ConfigSNMP = "snmp"
+)
+
 // OpenInherit means: use the user's or the global default open mode.
 const OpenInherit = "inherit"
 
@@ -107,9 +114,16 @@ type Device struct {
 	SNMPPort        int
 	// SNMPCredentials is the encrypted community or v3 login (nil = none stored).
 	SNMPCredentials []byte
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// ConfigSource is how settings on the switch are changed: none, edm or snmp.
+	ConfigSource string
+	// SNMPWriteCredentials is the encrypted SNMP write community or v3 login (nil = none stored).
+	SNMPWriteCredentials []byte
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
+
+// HasSNMPWriteCredentials reports whether SNMP write credentials are stored.
+func (d *Device) HasSNMPWriteCredentials() bool { return len(d.SNMPWriteCredentials) > 0 }
 
 // HasCredentials reports whether a login is stored.
 func (d *Device) HasCredentials() bool { return len(d.Credentials) > 0 }
@@ -144,7 +158,7 @@ func (d *Device) SwOS() bool { return d.Kind == KindSwOS }
 const deviceCols = `d.id, COALESCE(d.group_id, 0), COALESCE(g.name, ''), d.name, d.kind, d.url, d.open_mode, d.isolation,
 	d.tls_mode, d.tls_pin, d.tls_profile, d.credentials, d.auto_login, d.health_enabled, d.notes, d.sort,
 	d.monitor_source, d.monitor_driver, d.monitor_interval, d.snmp_version, d.snmp_port, d.snmp_credentials,
-	d.created_at, d.updated_at`
+	d.config_source, d.snmp_write_credentials, d.created_at, d.updated_at`
 
 const deviceFrom = ` FROM devices d LEFT JOIN device_groups g ON g.id = d.group_id`
 
@@ -154,7 +168,7 @@ func scanDevice(row interface{ Scan(...any) error }) (*Device, error) {
 	err := row.Scan(&d.ID, &d.GroupID, &d.GroupName, &d.Name, &d.Kind, &d.URL, &d.OpenMode, &d.Isolation,
 		&d.TLSMode, &d.TLSPin, &d.TLSProfile, &d.Credentials, &d.AutoLogin, &d.HealthEnabled, &d.Notes, &d.Sort,
 		&d.MonitorSource, &d.MonitorDriver, &d.MonitorInterval, &d.SNMPVersion, &d.SNMPPort, &d.SNMPCredentials,
-		&created, &updated)
+		&d.ConfigSource, &d.SNMPWriteCredentials, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -178,11 +192,11 @@ func (db *DB) CreateDevice(ctx context.Context, d *Device) error {
 	d.UpdatedAt = d.CreatedAt
 	res, err := db.sql.ExecContext(ctx, `INSERT INTO devices (group_id, name, kind, url, open_mode, isolation, tls_mode,
 		tls_pin, tls_profile, credentials, auto_login, health_enabled, notes, sort, monitor_source, monitor_driver, monitor_interval, snmp_version, snmp_port,
-		snmp_credentials, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		snmp_credentials, config_source, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nullID(d.GroupID), d.Name, d.Kind, d.URL, d.OpenMode, d.Isolation, d.TLSMode, d.TLSPin, d.TLSProfile,
 		d.Credentials, boolInt(d.AutoLogin), boolInt(d.HealthEnabled), d.Notes, d.Sort,
-		d.MonitorSource, d.MonitorDriver, d.MonitorInterval, d.SNMPVersion, d.SNMPPort, d.SNMPCredentials, unix(d.CreatedAt), unix(d.UpdatedAt))
+		d.MonitorSource, d.MonitorDriver, d.MonitorInterval, d.SNMPVersion, d.SNMPPort, d.SNMPCredentials, configSource(d.ConfigSource), unix(d.CreatedAt), unix(d.UpdatedAt))
 	if err != nil {
 		return err
 	}
@@ -196,10 +210,10 @@ func (db *DB) UpdateDevice(ctx context.Context, d *Device) error {
 	d.UpdatedAt = Now()
 	res, err := db.sql.ExecContext(ctx, `UPDATE devices SET group_id = ?, name = ?, kind = ?, url = ?, open_mode = ?,
 		isolation = ?, tls_mode = ?, auto_login = ?, health_enabled = ?, notes = ?, sort = ?, monitor_source = ?, monitor_driver = ?,
-		monitor_interval = ?, snmp_version = ?, snmp_port = ?, updated_at = ? WHERE id = ?`,
+		monitor_interval = ?, snmp_version = ?, snmp_port = ?, config_source = ?, updated_at = ? WHERE id = ?`,
 		nullID(d.GroupID), d.Name, d.Kind, d.URL, d.OpenMode, d.Isolation, d.TLSMode, boolInt(d.AutoLogin),
 		boolInt(d.HealthEnabled), d.Notes, d.Sort, d.MonitorSource, d.MonitorDriver, d.MonitorInterval,
-		d.SNMPVersion, d.SNMPPort, unix(d.UpdatedAt), d.ID)
+		d.SNMPVersion, d.SNMPPort, configSource(d.ConfigSource), unix(d.UpdatedAt), d.ID)
 	if err != nil {
 		return err
 	}
@@ -226,6 +240,22 @@ func (db *DB) SetDeviceSNMPCredentials(ctx context.Context, id int64, enc []byte
 	_, err := db.sql.ExecContext(ctx, `UPDATE devices SET snmp_credentials = ?, updated_at = ? WHERE id = ?`,
 		enc, unix(Now()), id)
 	return err
+}
+
+// SetDeviceSNMPWriteCredentials stores (or with nil removes) the encrypted
+// SNMP write community or v3 login.
+func (db *DB) SetDeviceSNMPWriteCredentials(ctx context.Context, id int64, enc []byte) error {
+	_, err := db.sql.ExecContext(ctx, `UPDATE devices SET snmp_write_credentials = ?, updated_at = ? WHERE id = ?`,
+		enc, unix(Now()), id)
+	return err
+}
+
+// configSource maps an empty value to ConfigNone.
+func configSource(s string) string {
+	if s == "" {
+		return ConfigNone
+	}
+	return s
 }
 
 // SetDeviceTLS stores the pinned certificate and the profile that worked.

@@ -13,7 +13,7 @@ then update this file, `architecture.md` and the changelog (see [CLAUDE.md](../C
 
 ## Current status
 
-_Last updated: 2026-11-04_
+_Last updated: 2026-11-05_
 
 | Phase | State |
 |---|---|
@@ -25,14 +25,21 @@ _Last updated: 2026-11-04_
 | 5 – Auto-login (experimental) | done (mock only) |
 | 6 – Hardware and 1.0 | in progress (6.1 partly) |
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS; stacks pending) |
+| 8 – Switch configuration | in progress on branch `switch-config` (8.2–8.10 and 8.12 done, 8.6 against the mock; open 8.1 and 8.11 on a VSP; design in [switch-configuration.md](switch-configuration.md)) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.14.
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.14, 8.2–8.10 and 8.12, with 8.6 against the mock only (branch `switch-config`).
 
 **Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
 ERS (verified against the mock and on the VSPs), and
 "Open in EDM" for a port on an ERS (verified on the VSP only), SNMPv3 with authPriv on a real
 switch (snmpsim cannot test it), see
 [hardware-tests.md](hardware-tests.md). Then 6.2.
+
+**Phase 8 (branch `switch-config`):** 8.2–8.5 done, against the in-memory test switch.
+8.6 is done against the mock switch, 8.7 against snmpsim, 8.8–8.10 (wiring and web UI)
+end to end against the mock switch; 8.12 done. Next: 8.1 (recording EDM's writes on a VSP,
+needs the VSP running), which also finishes 8.6, then 8.11 – checklist in section 9 of
+[hardware-tests.md](hardware-tests.md).
 
 **Verified on hardware (2026-11-04, step 7.14):** MikroTik CRS305-1G-4S+ with SwOS 2.18, read-only.
 New device kind `swos` (web interface through the proxy, server-side HTTP Digest login), driver
@@ -213,6 +220,43 @@ Never write to a device: no SNMP sets, no EDM `setVariables`.
 - **7.14 MikroTik SwOS.** Device kind `swos` (web interface through the proxy, HTTP Digest login
   on the server), driver `swos`, data source `swos` (SwOS's web API for VLANs, duplex and LAGs).
   *Done: verified read-only on a CRS305-1G-4S+ (SwOS 2.18).*
+
+## Phase 8 – Switch configuration (planned)
+
+Admins change port VLANs, port state and name, VLANs and PoE from the dashboard, with
+"commit confirmed" (automatic revert unless confirmed, save to NVRAM only on confirmation).
+VSP/VOSS first, through EDM (`setVariables`) and SNMP SET behind one interface. Monitoring
+stays read-only; writes live only in `internal/switchcfg`, off unless enabled globally and per
+device. Design and details: [switch-configuration.md](switch-configuration.md). Work happens on
+the branch `switch-config`.
+
+- **8.1 Recording on a VSP.** Each v1 action once by hand in EDM through the proxy; write
+  recipes (objects, encoding, answers, errors, save action) into switch-configuration.md.
+- **8.2 EDM session package.** Move session handling out of `edmsrc` into
+  `internal/edmsession`, shared by poller and writer (pure refactor). *Done.*
+- **8.3 Model and VOSS planner.** `Change`, `Assignment`, `Writer`, `Plan` with inverse and
+  expected values, capabilities, guards, port-set encoder; table tests. *Done
+  (`internal/switchcfg`, `internal/switchcfg/rcplan`; VOSS specifics to be confirmed in 8.1).*
+- **8.4 Migration 00004, store, `configure.*`.** `config_source`, SNMP write credentials,
+  `config_changes`. *Done; `configure.enabled` can only be set in `config.yaml`.*
+- **8.5 Manager.** Lock, poller gate, apply, read-back, pending, confirm and save, revert,
+  recovery on start; failure-injection tests. *Done (`switchcfg.Manager`, `poller.Hold`,
+  `PollNow`, `CollectNow`, `OpenSNMP`).*
+- **8.6 EDM writer.** `edmwrite`; the mock switch applies `setVariables` to its data. *Done
+  against the mock (formats from EDM's scripts); the VSP check is part of 8.1.*
+- **8.7 SNMP writer.** `snmpwrite`, encrypted write credentials, snmpsim `writecache` tests.
+  *Done (UI card for the write credentials follows in 8.8).*
+- **8.8 Wiring.** Readers and writers per channel, device form, audit entries. *Done; the
+  manager only exists when `configure.enabled` is set.*
+- **8.9 Web, read part.** Capabilities, preview bound to the plan hash, change history. *Done.*
+- **8.10 Web, write part.** Port and VLAN forms, confirm/revert banner (plain forms; the
+  countdown in JavaScript). *Done.*
+- **8.11 Hardware test.** VSP only, both channels, unused ports and test VLANs.
+- **8.12 Documentation and rules.** security, monitoring, drivers, architecture, CLAUDE.md,
+  README, CHANGELOG. *Done (threat T8 in security.md, planner guide in drivers.md, checklist
+  section 9 in hardware-tests.md).*
+
+8.2–8.5 need no hardware; 8.1 must be done before 8.6 is finished.
 
 ## Later
 

@@ -6,14 +6,38 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Changing switch settings from the dashboard (phase 8, experimental, VSP/VOSS only, not yet
+  verified on hardware; see `docs/switch-configuration.md`). Off unless `configure.enabled:
+  true` is set in `config.yaml` and the device has a configuration channel (EDM or SNMP);
+  admins only. Port VLANs, port state, port name, VLANs and PoE; every change is previewed,
+  applied "commit confirmed" and reverted automatically unless it is confirmed in time.
+  Change history per switch, audit log entries.
+- `configure.enabled` and `configure.confirm_timeout` in `config.yaml`. Writing to switches is
+  off by default and can only be turned on in the configuration file; no environment variable
+  enables it.
+- Migration `00004_configure.sql`: `devices.config_source`, `devices.snmp_write_credentials` and
+  the table `config_changes`.
+- Writers for phase 8: over EDM (`setVariables`, formats from EDM's own scripts,
+  tested against the mock switch) and over SNMP SET (tested against snmpsim), plus encrypted
+  SNMP write credentials that are cleared when the switch's address or SNMP port changes.
+
 ### Changed
 
+- EDM session handling moved from `internal/monitor/edmsrc` to `internal/edmsession`, so the
+  dashboard's EDM data source and future configuration changes share one session per switch.
 - The device list has a single *Add switch* button instead of *Add ERS switch* and *Add link*;
   the kind is chosen in the form.
 - The new-device form takes the switch login (auto-login, SwOS web login, EDM/SwOS data source)
   together with SNMP access, confirmed with one password entry.
 
 ### Fixed
+
+- A busy switch during the server-side EDM login (HTTP 5xx, such as VOSS's `503 Server Too
+  Busy` when all web sessions are taken) counted as a rejected password: the dashboard's EDM
+  data source then stopped logging in until the login was stored again. It is now a temporary
+  error and the next poll tries again.
 
 - "Open in EDM" for a port left `TypeError` messages in the console on VOSS 8 while EDM was
   still loading; the shim now calls EDM's click handlers directly and keeps such early failures

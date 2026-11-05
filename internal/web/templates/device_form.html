@@ -59,8 +59,22 @@
       </label>
       <label>{{.T "col.monitor_interval"}}<input name="monitor_interval" type="number" min="30" max="3600" value="{{$d.MonitorInterval}}" class="narrow"{{if eq .Data.ErrKey "monitor_interval"}} aria-invalid="true"{{end}}></label>
       <label>{{.T "col.snmp_port"}}<input name="snmp_port" type="number" min="1" max="65535" value="{{$d.SNMPPort}}" class="narrow"{{if eq .Data.ErrKey "snmp_port"}} aria-invalid="true"{{end}}></label>
-      <p class="muted small span-all">{{.T "devices.monitoring_hint"}}</p>
+      <p class="muted small span-all">{{if .Data.Configure}}{{.T "devices.monitoring_hint_cfg"}}{{else}}{{.T "devices.monitoring_hint"}}{{end}}</p>
     </fieldset>
+    {{if and .Data.Configure (not .Data.New)}}
+    <fieldset class="config-source">
+      <legend>{{.T "devices.config_source"}}</legend>
+      <label>{{.T "devices.config_source"}}
+        <select name="config_source">
+          <option value="none"{{if eq $d.ConfigSource "none"}} selected{{end}}>{{.T "config.src_none"}}</option>
+          {{if $d.EDM}}<option value="edm"{{if eq $d.ConfigSource "edm"}} selected{{end}}>{{.T "config.src_edm"}}</option>{{end}}
+          <option value="snmp"{{if eq $d.ConfigSource "snmp"}} selected{{end}}>{{.T "config.src_snmp"}}</option>
+        </select>
+      </label>
+      <label>{{.T "devices.config_password"}}<input name="confirm_password" type="password" autocomplete="current-password"{{if eq .Data.ErrKey "wrong_password"}} aria-invalid="true"{{end}}></label>
+      <p class="muted small span-all">{{.T "devices.config_hint"}}</p>
+    </fieldset>
+    {{end}}
     {{if .Data.New}}
     <fieldset>
       <legend>{{.T "devices.access_new"}}</legend>
@@ -100,8 +114,40 @@
     </div>
   </form>
   <p class="small muted">{{.T "devices.snmp_hint"}}</p>
-  <p class="small muted">{{.T "devices.snmp_readonly"}}</p>
+  <p class="small muted">{{if .Data.Configure}}{{.T "devices.snmp_readonly_cfg"}}{{else}}{{.T "devices.snmp_readonly"}}{{end}}</p>
 </section>
+{{if .Data.Configure}}
+<section class="card config-snmp-write">
+  <h3>{{.T "devices.snmp_write"}}</h3>
+  <p class="small muted">{{if $d.HasSNMPWriteCredentials}}{{.T "devices.snmp_write_stored"}} (SNMP{{$d.SNMPVersion}}){{else}}{{.T "devices.snmp_write_none"}}{{end}}</p>
+  <form method="post" action="/admin/devices/{{$d.ID}}/snmp-write" class="form-grid" id="snmp-write-form" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="snmp_version" value="{{$d.SNMPVersion}}">
+    {{if eq $d.SNMPVersion "v3"}}
+    <label>{{.T "snmp.username"}}<input name="username" maxlength="64" autocomplete="off"></label>
+    <label>{{.T "snmp.security_level"}}
+      <select name="security_level">{{range $l := securityLevels}}<option value="{{$l}}"{{if eq $l "authPriv"}} selected{{end}}>{{$l}}</option>{{end}}</select>
+    </label>
+    <label>{{.T "snmp.auth_protocol"}}
+      <select name="auth_protocol">{{range $p := authProtocols}}<option value="{{$p}}"{{if eq $p "SHA-256"}} selected{{end}}>{{$p}}</option>{{end}}</select>
+    </label>
+    <label>{{.T "snmp.auth_password"}}<input name="auth_password" type="password" maxlength="128" autocomplete="new-password"></label>
+    <label>{{.T "snmp.priv_protocol"}}
+      <select name="priv_protocol">{{range $p := privProtocols}}<option value="{{$p}}"{{if eq $p "AES-128"}} selected{{end}}>{{$p}}</option>{{end}}</select>
+    </label>
+    <label>{{.T "snmp.priv_password"}}<input name="priv_password" type="password" maxlength="128" autocomplete="new-password"></label>
+    <label>{{.T "snmp.context_name"}}<input name="context_name" maxlength="64" autocomplete="off"></label>
+    {{else}}
+    <label>{{.T "snmp.community"}}<input name="community" type="password" maxlength="128" autocomplete="new-password"></label>
+    {{end}}
+    <label>{{.T "devices.confirm_password"}}<input name="confirm_password" type="password" required autocomplete="current-password"></label>
+    <div class="actions">
+      <button type="submit">{{.T "action.save"}}</button>
+      {{if $d.HasSNMPWriteCredentials}}<button type="submit" name="clear" value="1" class="danger" data-confirm="{{.T "devices.snmp_write_clear_confirm"}}" formnovalidate>{{.T "devices.snmp_clear"}}</button>{{end}}
+    </div>
+  </form>
+  <p class="small muted">{{.T "devices.snmp_write_hint"}}</p>
+</section>
+{{end}}
 {{end}}
 {{if and (not .Data.New) $d.Upstream}}
 <div class="grid-2">

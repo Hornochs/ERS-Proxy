@@ -57,7 +57,8 @@ var serverCmd = &cobra.Command{
 		checker := health.New(e.db, e.cfg, log)
 		ui.Health = checker
 		mon := poller.New(e.db, e.key, monitor.NewRegistry(drivers.All()...), log)
-		mon.OpenEDM = newEDMSource(proxy, e.key)
+		edm := newEDMSource(proxy, e.key)
+		mon.OpenEDM = edm.open
 		mon.OpenSwOS = newSwOSSource(proxy)
 		rec := history.New(e.db, e.cfg.Monitor.Retention, log)
 		mon.Sink = rec
@@ -70,6 +71,13 @@ var serverCmd = &cobra.Command{
 			}
 			checker.Trigger()
 			mon.Trigger()
+		}
+		if e.cfg.Configure.Enabled {
+			// Only config.yaml turns this on (configure.enabled).
+			log.Warn("changing switch settings is enabled (configure.enabled): admins can write to switches with a configuration channel")
+			mgr := newConfigure(e, edm, mon)
+			ui.Configure = mgr
+			go mgr.Run(ctx)
 		}
 		go checker.Run(ctx)
 		go mon.Run(ctx)

@@ -70,6 +70,9 @@ func Normalize(d *store.Device) error {
 	if d.TLSPin != "" && (len(d.TLSPin) != 64 || strings.Trim(d.TLSPin, "0123456789abcdef") != "") {
 		return fieldErr("tls_pin", "certificate fingerprint must be 64 hex characters (SHA-256)")
 	}
+	if err := normalizeConfigSource(d); err != nil {
+		return err
+	}
 	if err := normalizeMonitoring(d); err != nil {
 		return err
 	}
@@ -98,6 +101,24 @@ func Normalize(d *store.Device) error {
 		d.Isolation, d.TLSMode, d.TLSPin = store.IsolationSandbox, store.TLSAuto, ""
 	default:
 		return fieldErr("kind", "kind %q: want ers-edm, vsp-edm, edm-direct, swos or link", d.Kind)
+	}
+	return nil
+}
+
+// normalizeConfigSource validates how settings are changed on the switch. It
+// does not look at the global configure.enabled switch; the UI and the manager
+// enforce that.
+func normalizeConfigSource(d *store.Device) error {
+	switch d.ConfigSource {
+	case "":
+		d.ConfigSource = store.ConfigNone
+	case store.ConfigNone, store.ConfigSNMP:
+	case store.ConfigEDM:
+		if !d.EDM() {
+			return fieldErr("config_source", "the EDM configuration source needs a device of kind ers-edm, vsp-edm or edm-direct")
+		}
+	default:
+		return fieldErr("config_source", "config source %q: want none, edm or snmp", d.ConfigSource)
 	}
 	return nil
 }
@@ -302,6 +323,38 @@ func DecryptSNMP(k *secret.Key, d *store.Device) (snmp.Credentials, error) {
 		return snmp.Credentials{}, errors.New("no SNMP credentials stored")
 	}
 	plain, err := k.Decrypt(d.SNMPCredentials, SNMPAAD(d))
+	if err != nil {
+		return snmp.Credentials{}, err
+	}
+	return snmp.UnmarshalCredentials(plain)
+}
+
+// SNMPWriteAAD is the associated data that binds stored SNMP write credentials
+// to a device, its host and its SNMP port. It differs from SNMPAAD, so read
+// and write credentials cannot be swapped.
+func SNMPWriteAAD(d *store.Device) []byte {
+	host, _ := HostPort(d.URL)
+	return []byte("ers-proxy snmp-write|" + fmt.Sprint(d.ID) + "|" + host + "|" + fmt.Sprint(d.SNMPPort))
+}
+
+// EncryptSNMPWrite encrypts SNMP write credentials for d. d.ID must be set.
+func EncryptSNMPWrite(k *secret.Key, d *store.Device, c snmp.Credentials) ([]byte, error) {
+	if d.ID == 0 {
+		return nil, errors.New("device must be saved before SNMP write credentials are stored")
+	}
+	plain, err := c.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	return k.Encrypt(plain, SNMPWriteAAD(d))
+}
+
+// DecryptSNMPWrite opens the SNMP write credentials stored for d.
+func DecryptSNMPWrite(k *secret.Key, d *store.Device) (snmp.Credentials, error) {
+	if !d.HasSNMPWriteCredentials() {
+		return snmp.Credentials{}, errors.New("no SNMP write credentials stored")
+	}
+	plain, err := k.Decrypt(d.SNMPWriteCredentials, SNMPWriteAAD(d))
 	if err != nil {
 		return snmp.Credentials{}, err
 	}

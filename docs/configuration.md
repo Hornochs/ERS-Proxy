@@ -29,6 +29,8 @@ writes a commented example ([config.example.yaml](config.example.yaml)).
 | `monitor.retention.quarter` | `720h` | How long the 15-minute resolution is kept (not shorter than `minute`). |
 | `monitor.retention.hour` | `8760h` | How long the 1-hour resolution is kept (not shorter than `quarter`). |
 | `monitor.retention.events` | `8760h` | How long port events (link changes etc.) are kept (at least `24h`). |
+| `configure.enabled` | `false` | Allows changing switch settings from the dashboard (admins only). Off by default and only settable in `config.yaml`; no environment variable can enable it. Port monitoring stays read-only. |
+| `configure.confirm_timeout` | `2m` | How long a change waits for confirmation before it is reverted (`30s` to `30m`). |
 
 ### History size
 

@@ -8,8 +8,8 @@ done on its own day.
 ## Safety rules (read first)
 
 - **Read-only.** Never click *Apply*, *Save*, *Reset* or *Delete* in EDM, never run
-  configuration commands on the switch, never send SNMP SETs (ERS-Proxy cannot). Navigate and
-  look only.
+  configuration commands on the switch, never send SNMP SETs. Navigate and look only. The only
+  exception is section 9 (configuration changes), on a switch approved for writes.
 - Use a **read-only account** for EDM (e.g. the `RO` user) and a **read-only SNMP community or
   SNMPv3 read-only user**. Only where a step needs more, it says so.
 - Production switches: agree on a time window with the maintainer before starting.
@@ -166,6 +166,44 @@ Needs the stored EDM login of section 4 (read-only account).
    about a minute.
 2. HTTPS device: if the switch certificate is regenerated (only if planned anyway), the dot turns
    orange ("certificate changed") and opening the device is blocked until an admin confirms.
+
+## 9. Configuration changes (phase 8, approved test VSP only)
+
+**The read-only rule above does not apply to this section, and only this section.** Only on a
+switch the maintainer has approved for writes, only on unused ports and test VLANs, never on
+an uplink or the management VLAN. Run it from an isolated test instance with
+`configure.enabled: true`. Log out of EDM after each run (the VSP allows few web sessions).
+Afterwards check that the switch is as before and reset it if not.
+
+Step 8.1 – recording (before the writers are trusted):
+
+1. Open the switch's EDM through the proxy with debug logging, or in Chromium with the
+   DevTools network tab. For each action, do it once by hand in EDM and record the
+   `setFormMibs.jsp` request (varNames, varValues, varCount) and the answer:
+   set a port's PVID; add a port to a VLAN and remove it again (PortSet); change a port's
+   tagging; create a VLAN (all columns EDM sends, especially STG/MSTI) and delete it; rename a
+   VLAN; set a port's name; disable and enable an unused port; switch PoE off and on (if the
+   model has PoE); "Save configuration". Also provoke one error (e.g. an invalid VLAN ID) and
+   record the error answer.
+2. Compare with "Write recipes" in [switch-configuration.md](switch-configuration.md) and fill
+   in what was open: the success answer, the tagging values, the order VOSS accepts, the
+   columns for a new VLAN, the save action, PoE over EDM.
+
+Step 8.11 – ERS-Proxy writing, for the EDM channel and again for the SNMP channel (SNMP needs a
+write community or SNMPv3 user on the switch):
+
+| # | Action | Expected |
+|---|---|---|
+| C.1 | Port VLAN move (access, unused port), preview | steps and warnings shown; nothing written yet (check in EDM) |
+| C.2 | Apply, then Confirm | read-back ok, banner, change kept; saved if the save action is known |
+| C.3 | Apply, then Revert | port as before (check in EDM and on the dashboard) |
+| C.4 | Apply, do nothing | reverted at the deadline; audit entry by `system` |
+| C.5 | Apply, restart ERS-Proxy while pending, wait for the deadline | reverted after the restart |
+| C.6 | Create a test VLAN, rename it, delete it | each step read back; delete restores members on revert |
+| C.7 | Port name, port disable/enable (unused port) | as C.2/C.3 |
+| C.8 | PoE off/on (PoE model, nothing important connected) | as C.2/C.3 |
+| C.9 | Change the switch in EDM between preview and apply | "the switch changed since the preview", nothing written |
+| C.10 | Invalid value (e.g. an alias the switch rejects) | apply fails, already written steps reverted, state `failed` |
 
 ## After the tests
 

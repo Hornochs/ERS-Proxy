@@ -24,6 +24,11 @@ Avaya/Extreme ERS switches work in today's browsers.**
   VLANs, PoE, LAG, LLDP neighbour and traffic with history – read-only via SNMP, via the EDM
   interface on ERS and VSP switches, or via SwOS's web API. Vendors plug in as drivers (generic
   Q-BRIDGE, ERS, VSP/VOSS, Cisco, TP-Link, MikroTik SwOS).
+- **Change settings (optional, experimental).** Off by default. With `configure.enabled` in
+  `config.yaml`, admins can change port VLANs, port state and name, VLANs and PoE from the
+  dashboard – VSP/VOSS first. Every change is previewed, applied "commit confirmed" and reverted
+  automatically unless it is confirmed in time. See
+  [docs/switch-configuration.md](docs/switch-configuration.md).
 - **Easy to run.** One static binary, SQLite, packages for Debian/Ubuntu, Fedora/RHEL, Arch and
   Alpine, and a Docker image. Works behind a reverse proxy on a single domain and port.
 

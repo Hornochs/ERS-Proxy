@@ -2,7 +2,9 @@
 
 A driver tells the port dashboard where one vendor keeps its data. This page is for
 contributors; administrators want [monitoring.md](monitoring.md). Everything here is
-**read-only**: a driver never writes to a device.
+**read-only**: a driver never writes to a device. Changing settings is done by planners in
+`internal/switchcfg` (see [switch-configuration.md](switch-configuration.md) and "Planners for
+configuration changes" below).
 
 ## Architecture
 
@@ -150,9 +152,30 @@ note to the snapshot. The `swos` driver then works the same over SNMP and over t
 - **Treat everything a device reports as untrusted.** Names, aliases and neighbour data are
   displayed after escaping; do not build paths, commands or queries from them, and do not
   assume sizes (bitmaps may be shorter or longer than expected, indexes may be missing).
-- **No SNMP SET, no EDM writes**, not even "harmless" ones.
+- **No SNMP SET, no EDM writes** in a driver, not even "harmless" ones.
 - **Record assumptions.** If a driver relies on facts that no real device confirmed (port
   numbering, bitmap order, tagging semantics), add a line to `Snapshot.Notes`. Notes appear on
   the switch page and in `snmp-test --collect`; the `ers` driver does this for stacks
   (numbering of units 2–8).
 - A device that lacks an optional table must still produce a snapshot.
+
+## Planners for configuration changes
+
+Changing settings is optional (`configure.enabled`) and separate from drivers. A planner
+(`switchcfg.Planner`, one per driver name) turns a `switchcfg.Change` into a `Plan`: it reads
+the current values through the same `monitor.Reader` interface, checks the change, and returns
+ordered steps, the inverse steps from the values it read, the expected values for the
+read-back, warnings and refusals. It never writes itself; the manager does.
+
+- Put a planner in its own package below `internal/switchcfg` (see `rcplan` for RAPID-CITY
+  switches) and register it in `cmd/ers-proxy/cmd/configure.go`.
+- Objects a planner reads must be in `monitor.Objects` (the SNMP reader resolves names only
+  there); objects that are only written go into `switchcfg.Objects`. For EDM, add tables the
+  planner reads to `edmsrc.Tables`.
+- Compute the inverse as the transition from the new state back to the old one, with absolute
+  values, so that it also works on a partly applied change. Test every plan with
+  `switchcfgtest`: apply, verify `Expected`, apply the inverse, and compare the whole state with
+  the original.
+- Refuse what cannot be restored, and warn about anything that could cut the switch off
+  (uplinks, LAGs, the management VLAN).
+- Never test writes against a real switch except one the maintainer has approved for it.

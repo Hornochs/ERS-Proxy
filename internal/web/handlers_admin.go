@@ -41,11 +41,13 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 }
 
 type deviceFormData struct {
-	Device  *store.Device
-	Groups  []*store.Group
-	New     bool
-	ErrKey  string
-	Pending string // fingerprint offered by a connection test, to confirm
+	// Configure is set when changing switch settings is enabled.
+	Configure bool
+	Device    *store.Device
+	Groups    []*store.Group
+	New       bool
+	ErrKey    string
+	Pending   string // fingerprint offered by a connection test, to confirm
 }
 
 func (s *Server) deviceForm(w http.ResponseWriter, r *http.Request, status int, d *store.Device, isNew bool, errKey string) {
@@ -58,7 +60,7 @@ func (s *Server) deviceForm(w http.ResponseWriter, r *http.Request, status int, 
 	if isNew {
 		title = "devices.new"
 	}
-	p := s.page(r, title, "admin", deviceFormData{Device: d, Groups: groups, New: isNew, ErrKey: errKey})
+	p := s.page(r, title, "admin", deviceFormData{Configure: s.Configure != nil, Device: d, Groups: groups, New: isNew, ErrKey: errKey})
 	if errKey != "" {
 		p.Error = p.T("device.err." + errKey)
 	}
@@ -199,6 +201,21 @@ func (s *Server) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 		s.deviceForm(w, r, http.StatusUnprocessableEntity, &d, false, fieldKey(err))
 		return
 	}
+	// The configuration source exists in the form only when changing switch
+	// settings is enabled; otherwise the stored value stays as it is.
+	if s.Configure != nil {
+		if v := r.PostFormValue("config_source"); v != "" {
+			d.ConfigSource = v
+		}
+		if err := devices.Normalize(&d); err != nil {
+			s.deviceForm(w, r, http.StatusUnprocessableEntity, &d, false, fieldKey(err))
+			return
+		}
+		if configOn(d.ConfigSource) && !configOn(before.ConfigSource) && !s.confirmPassword(r) {
+			s.deviceForm(w, r, http.StatusUnprocessableEntity, &d, false, "wrong_password")
+			return
+		}
+	}
 	moved := devices.AddressChanged(before, &d)
 	if err := s.DB.UpdateDevice(r.Context(), &d); err != nil {
 		s.fail(w, r, err)
@@ -229,6 +246,17 @@ func (s *Server) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		details += " (SNMP credentials cleared)"
+	}
+	// SNMP write credentials are bound to host and SNMP port as well.
+	if (moved || before.SNMPPort != d.SNMPPort) && before.HasSNMPWriteCredentials() {
+		if err := s.DB.SetDeviceSNMPWriteCredentials(r.Context(), d.ID, nil); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		details += " (SNMP write credentials cleared)"
+	}
+	if d.ConfigSource != before.ConfigSource {
+		details += " (configuration source " + before.ConfigSource + " -> " + d.ConfigSource + ")"
 	}
 	s.Audit(r, "device.update", d.Name, details)
 	s.UpdateFrameSources(r.Context())
@@ -741,4 +769,50 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	data.Version = p.Version
 	p.Data = data
 	s.render(w, r, "diagnostics", p)
+}
+
+func configOn(src string) bool { return src == store.ConfigEDM || src == store.ConfigSNMP }
+
+// deviceSNMPWrite stores or clears the SNMP write credentials. Like the read
+// credentials the form is write-only. The SNMP version is the device's (the
+// write channel uses the same target as the read channel).
+func (s *Server) deviceSNMPWrite(w http.ResponseWriter, r *http.Request) {
+	d, ok := s.loadDevice(w, r)
+	if !ok {
+		return
+	}
+	back := fmt.Sprintf("/admin/devices/%d/edit", d.ID)
+	if !s.confirmPassword(r) {
+		redirect(w, r, back+"?err=wrong_password")
+		return
+	}
+	if r.PostFormValue("clear") == "1" {
+		if err := s.DB.SetDeviceSNMPWriteCredentials(r.Context(), d.ID, nil); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		s.Audit(r, "device.snmp_write.clear", d.Name, "")
+		s.deviceChanged(d.ID)
+		redirect(w, r, back+"?ok=saved")
+		return
+	}
+	v := d.SNMPVersion
+	r.PostForm.Set("snmp_version", v)
+	_, c, _ := readSNMP(r, v)
+	if !validSNMP(d, v, c) {
+		redirect(w, r, back+"?err=snmp_invalid")
+		return
+	}
+	enc, err := devices.EncryptSNMPWrite(s.Key, d, c)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.DB.SetDeviceSNMPWriteCredentials(r.Context(), d.ID, enc); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.Audit(r, "device.snmp_write.set", d.Name, "SNMP"+v) // never the values
+	s.deviceChanged(d.ID)
+	redirect(w, r, back+"?ok=saved")
 }

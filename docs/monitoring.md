@@ -2,7 +2,9 @@
 
 The port dashboard shows every port of every monitored switch on one page: link state, speed
 and duplex, VLANs, PoE, link aggregation, LLDP neighbour and traffic with stored history. It
-**only reads**. ERS-Proxy never sends SNMP SET requests and never writes to a switch through EDM.
+**only reads**: polling never sends SNMP SET requests and never writes to a switch through EDM.
+Changing switch settings is a separate, optional feature that is off unless enabled in
+`config.yaml`; see [switch-configuration.md](switch-configuration.md).
 
 ## What you see
 
@@ -206,8 +208,10 @@ ERS-Proxy the first poll again only provides the baseline.
 - Credentials are stored encrypted (AES-256-GCM, key in `secret_key_file`), bound to device,
   host and SNMP port, write-only in the UI, and excluded from logs, audit log and exports. See
   [security.md](security.md).
-- Nothing is written to devices. The `internal/snmp` package has no SET API and tests
+- Monitoring writes nothing to devices. The `internal/snmp` package has no SET API and tests
   (`TestReadOnly`) fail if the SNMP code or the monitor package calls a set function.
+  Configuration changes (optional) live in `internal/switchcfg` and use their own write
+  credentials; the read-only community here is never used for writing.
 - Everything a switch reports (names, aliases, neighbour names) is treated as untrusted and
   escaped in the UI.
 

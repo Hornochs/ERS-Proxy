@@ -98,6 +98,8 @@ var Objects = map[string]string{
 	// Avaya/Nortel ERS (RAPID-CITY, S5-CHASSIS); from the firmware's agent table
 	"rcVlanName":                  "1.3.6.1.4.1.2272.1.3.2.1.2",
 	"rcVlanPortMembers":           "1.3.6.1.4.1.2272.1.3.2.1.11",
+	"rcVlanStgId":                 "1.3.6.1.4.1.2272.1.3.2.1.9",
+	"rcVlanType":                  "1.3.6.1.4.1.2272.1.3.2.1.10",
 	"rcVlanPortDefaultVlanId":     "1.3.6.1.4.1.2272.1.3.3.1.7",
 	"rcVlanPortPerformTagging":    "1.3.6.1.4.1.2272.1.3.3.1.8",
 	"rcPortOperDuplex":            "1.3.6.1.4.1.2272.1.4.10.1.1.13",
@@ -112,6 +114,9 @@ var Objects = map[string]string{
 	// MIKROTIK-MIB scalars (RouterOS and SwOS)
 	"mtxrSerialNumber":    "1.3.6.1.4.1.14988.1.1.7.3",
 	"mtxrFirmwareVersion": "1.3.6.1.4.1.14988.1.1.7.4",
+	// IP-MIB ipAddrTable: interfaces with an IP address (read by
+	// internal/switchcfg to find the management VLAN)
+	"ipAdEntIfIndex": "1.3.6.1.2.1.4.20.1.2",
 	// RAPID-CITY scalars of VSP/VOSS switches
 	"rcSysVersion":       "1.3.6.1.4.1.2272.1.1.7",
 	"rcChasSerialNumber": "1.3.6.1.4.1.2272.1.4.2",
