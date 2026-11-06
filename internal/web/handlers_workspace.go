@@ -56,7 +56,7 @@ func (s *Server) EffectiveOpenMode(u *store.User, d *store.Device) string {
 		}
 	}
 	if mode == config.OpenEmbedded && d.Direct() {
-		if d.Kind == store.KindEDMDirect || !s.linkEmbeddable(d) {
+		if d.AlwaysTab() || !s.linkEmbeddable(d) {
 			mode = config.OpenTab
 		}
 	}

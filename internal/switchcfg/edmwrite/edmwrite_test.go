@@ -36,16 +36,17 @@ func TestEncode(t *testing.T) {
 		{Name: "rcVlanPortDefaultVlanId", Index: "5", Value: switchcfg.Int(20)},
 		{Name: "someCounter", Index: "", Value: monitor.Value{Kind: monitor.KindUint, Uint: 7}},
 		{Name: "x", Index: "1", Value: monitor.Value{Kind: monitor.KindOID, OID: "1.3.6.1"}},
+		{Name: "ifAlias", Index: "6", Value: switchcfg.Text("")},
 	}
 	f, err := edmwrite.Encode(as)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Get("command") != "setVariables" || f.Get("varCount") != "7" {
+	if f.Get("command") != "setVariables" || f.Get("varCount") != "8" {
 		t.Fatalf("form %v", f)
 	}
-	wantNames := "rcVlanPortMembers.10\trcVlanPortMembers.11\trcVlanName.10\tifAlias.5\trcVlanPortDefaultVlanId.5\tsomeCounter.0\tx.1"
-	wantValues := "0x00:40:80\t0x00:00\tOffice 1\t0xff:61\t20\t7\t1.3.6.1"
+	wantNames := "rcVlanPortMembers.10\trcVlanPortMembers.11\trcVlanName.10\tifAlias.5\trcVlanPortDefaultVlanId.5\tsomeCounter.0\tx.1\tifAlias.6"
+	wantValues := "0x00:40:80\t0x00:00\tOffice 1\t0xff:61\t20\t7\t1.3.6.1\t0x00:"
 	if f.Get("varNames") != wantNames || f.Get("varValues") != wantValues {
 		t.Fatalf("names %q\nvalues %q", f.Get("varNames"), f.Get("varValues"))
 	}
@@ -81,6 +82,14 @@ func TestParseAnswer(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "10") || !strings.Contains(err.Error(), "wrongValue") {
 		t.Fatalf("text %q", err)
+	}
+	// The answers of a VSP 8404 with VOSS 8.10.1.
+	if err := edmwrite.ParseAnswer("ifAlias:ersproxy-test\r\n"); err != nil {
+		t.Errorf("VOSS success answer: %v", err)
+	}
+	err = edmwrite.ParseAnswer("snmpErrorStatus:10\r\nsnmpErrorIndex:1\r\n")
+	if !errors.As(err, &se) || se.Status != 10 || se.Index != 1 || !strings.Contains(err.Error(), "wrongValue") {
+		t.Fatalf("VOSS error answer: %#v", err)
 	}
 	if err := edmwrite.ParseAnswer("snmpErrorStatus:-3"); !errors.As(err, &se) || se.Status != -3 || se.Index != 0 {
 		t.Fatalf("err %#v", err)

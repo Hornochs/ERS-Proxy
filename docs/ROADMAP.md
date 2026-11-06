@@ -13,7 +13,7 @@ then update this file, `architecture.md` and the changelog (see [CLAUDE.md](../C
 
 ## Current status
 
-_Last updated: 2026-11-05_
+_Last updated: 2026-11-06_
 
 | Phase | State |
 |---|---|
@@ -24,10 +24,10 @@ _Last updated: 2026-11-05_
 | 4 – Health checks | done |
 | 5 – Auto-login (experimental) | done (mock only) |
 | 6 – Hardware and 1.0 | in progress (6.1 partly) |
-| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS; stacks pending) |
-| 8 – Switch configuration | in progress on branch `switch-config` (8.2–8.10 and 8.12 done, 8.6 against the mock; open 8.1 and 8.11 on a VSP; design in [switch-configuration.md](switch-configuration.md)) |
+| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721; stacks pending) |
+| 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.14, 8.2–8.10 and 8.12, with 8.6 against the mock only (branch `switch-config`).
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.15, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
 
 **Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
 ERS (verified against the mock and on the VSPs), and
@@ -37,9 +37,22 @@ switch (snmpsim cannot test it), see
 
 **Phase 8 (branch `switch-config`):** 8.2–8.5 done, against the in-memory test switch.
 8.6 is done against the mock switch, 8.7 against snmpsim, 8.8–8.10 (wiring and web UI)
-end to end against the mock switch; 8.12 done. Next: 8.1 (recording EDM's writes on a VSP,
-needs the VSP running), which also finishes 8.6, then 8.11 – checklist in section 9 of
-[hardware-tests.md](hardware-tests.md).
+end to end against the mock switch; 8.12 done. 8.1 (recording EDM's writes) is done on a
+VSP 8404 with VOSS 8.10.1.0 (2026-11-06), which also verified 8.6 on hardware. The first run of
+8.11 over the EDM channel passed C.1–C.10 on the same switch (C.8 n/a). Next: 8.11, SNMP channel
+(needs SNMP write credentials on the switch), then VOSS 7.1 (VSP 4850GTS) – checklist in
+section 9 of [hardware-tests.md](hardware-tests.md). ERS switches are not supported by the
+planner yet.
+
+**Verified on hardware (2026-11-06, step 7.15):** Grandstream GWN7721 (firmware 1.0.7.128),
+read-only. New device kind `gwn`, driver `grandstream` and data source `gwn` (the switch's web
+API plus SNMP); ports, VLANs, PVID, tagging, LLDP and rates match the switch's web interface.
+Findings: a TCP reset (RST) on the HTTPS port reboots the switch (a port scan triggers it;
+the client never resets, `http://` is recommended; to be checked on a second unit and reported
+to Grandstream); the switch allows one web session per account (a login is refused while
+someone else is logged in); its SNMP agent drops requests with more than four variable
+bindings (ERS-Proxy now asks for at most four per GET). Not seen on hardware: LAGs, PoE
+models.
 
 **Verified on hardware (2026-11-04, step 7.14):** MikroTik CRS305-1G-4S+ with SwOS 2.18, read-only.
 New device kind `swos` (web interface through the proxy, server-side HTTP Digest login), driver
@@ -220,6 +233,10 @@ Never write to a device: no SNMP sets, no EDM `setVariables`.
 - **7.14 MikroTik SwOS.** Device kind `swos` (web interface through the proxy, HTTP Digest login
   on the server), driver `swos`, data source `swos` (SwOS's web API for VLANs, duplex and LAGs).
   *Done: verified read-only on a CRS305-1G-4S+ (SwOS 2.18).*
+- **7.15 Grandstream GWN.** Device kind `gwn` (web interface opened directly in a tab), driver
+  `grandstream`, data source `gwn` (web API for VLANs, duplex, LLDP and LAGs, SNMP for
+  counters); SNMP GETs carry at most four objects. *Done: verified read-only on a GWN7721
+  (firmware 1.0.7.128).*
 
 ## Phase 8 – Switch configuration (planned)
 
@@ -232,18 +249,21 @@ the branch `switch-config`.
 
 - **8.1 Recording on a VSP.** Each v1 action once by hand in EDM through the proxy; write
   recipes (objects, encoding, answers, errors, save action) into switch-configuration.md.
+  *Done 2026-11-06 on a VSP 8404 (VOSS 8.10.1.0): the VOSS planner now saves on confirm
+  (`rcSysActionL1` = 7) and supports hybrid ports.*
 - **8.2 EDM session package.** Move session handling out of `edmsrc` into
   `internal/edmsession`, shared by poller and writer (pure refactor). *Done.*
 - **8.3 Model and VOSS planner.** `Change`, `Assignment`, `Writer`, `Plan` with inverse and
   expected values, capabilities, guards, port-set encoder; table tests. *Done
-  (`internal/switchcfg`, `internal/switchcfg/rcplan`; VOSS specifics to be confirmed in 8.1).*
+  (`internal/switchcfg`, `internal/switchcfg/rcplan`; VOSS specifics confirmed in 8.1).*
 - **8.4 Migration 00004, store, `configure.*`.** `config_source`, SNMP write credentials,
   `config_changes`. *Done; `configure.enabled` can only be set in `config.yaml`.*
 - **8.5 Manager.** Lock, poller gate, apply, read-back, pending, confirm and save, revert,
   recovery on start; failure-injection tests. *Done (`switchcfg.Manager`, `poller.Hold`,
   `PollNow`, `CollectNow`, `OpenSNMP`).*
 - **8.6 EDM writer.** `edmwrite`; the mock switch applies `setVariables` to its data. *Done
-  against the mock (formats from EDM's scripts); the VSP check is part of 8.1.*
+  against the mock; verified on a VSP 8404 in 8.1 (empty text as `0x00:`, `snmpErrorIndex`,
+  status names).*
 - **8.7 SNMP writer.** `snmpwrite`, encrypted write credentials, snmpsim `writecache` tests.
   *Done (UI card for the write credentials follows in 8.8).*
 - **8.8 Wiring.** Readers and writers per channel, device form, audit entries. *Done; the
@@ -251,7 +271,9 @@ the branch `switch-config`.
 - **8.9 Web, read part.** Capabilities, preview bound to the plan hash, change history. *Done.*
 - **8.10 Web, write part.** Port and VLAN forms, confirm/revert banner (plain forms; the
   countdown in JavaScript). *Done.*
-- **8.11 Hardware test.** VSP only, both channels, unused ports and test VLANs.
+- **8.11 Hardware test.** VSP only, both channels, unused ports and test VLANs. *Partly: EDM
+  channel on a VSP 8404 (VOSS 8.10.1.0), 2026-11-06, C.1–C.10 ok (C.8 n/a). Open: SNMP channel,
+  VOSS 7.1.*
 - **8.12 Documentation and rules.** security, monitoring, drivers, architecture, CLAUDE.md,
   README, CHANGELOG. *Done (threat T8 in security.md, planner guide in drivers.md, checklist
   section 9 in hardware-tests.md).*

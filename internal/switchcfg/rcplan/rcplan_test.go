@@ -207,12 +207,14 @@ func TestRefusals(t *testing.T) {
 		"vlan_missing": {Ports: []switchcfg.PortChange{{IfIndex: 193, VLANs: &switchcfg.PortVLANs{Untagged: 99}}}},
 		"vlan_id":      {VLANs: []switchcfg.VLANChange{{Op: switchcfg.VLANCreate, ID: 4095, Name: "x"}}},
 		"vlan_name":    {VLANs: []switchcfg.VLANChange{{Op: switchcfg.VLANCreate, ID: 50, Name: " "}}},
-		"hybrid":       {Ports: []switchcfg.PortChange{{IfIndex: 193, VLANs: &switchcfg.PortVLANs{Untagged: 1, Tagged: []int{10}}}}},
-		"no_vlan":      {Ports: []switchcfg.PortChange{{IfIndex: 193, VLANs: &switchcfg.PortVLANs{}}}},
-		"vlan_dup":     {Ports: []switchcfg.PortChange{{IfIndex: 195, VLANs: &switchcfg.PortVLANs{Tagged: []int{20, 20}}}}},
-		"port":         {Ports: []switchcfg.PortChange{{IfIndex: 999, Admin: ptr(true)}}},
-		"no_change":    {Ports: []switchcfg.PortChange{{IfIndex: 192, Admin: ptr(true)}}},
-		"alias":        {Ports: []switchcfg.PortChange{{IfIndex: 192, Alias: ptr("tab\there")}}},
+		// 1/4 has no rcVlanPortUntagDefaultVlan.
+		"hybrid":      {Ports: []switchcfg.PortChange{{IfIndex: 195, VLANs: &switchcfg.PortVLANs{Untagged: 20, Tagged: []int{30}}}}},
+		"no_untagged": {Ports: []switchcfg.PortChange{{IfIndex: 193, VLANs: &switchcfg.PortVLANs{Hybrid: true, Tagged: []int{10}}}}},
+		"no_vlan":     {Ports: []switchcfg.PortChange{{IfIndex: 193, VLANs: &switchcfg.PortVLANs{}}}},
+		"vlan_dup":    {Ports: []switchcfg.PortChange{{IfIndex: 195, VLANs: &switchcfg.PortVLANs{Tagged: []int{20, 20}}}}},
+		"port":        {Ports: []switchcfg.PortChange{{IfIndex: 999, Admin: ptr(true)}}},
+		"no_change":   {Ports: []switchcfg.PortChange{{IfIndex: 192, Admin: ptr(true)}}},
+		"alias":       {Ports: []switchcfg.PortChange{{IfIndex: 192, Alias: ptr("tab\there")}}},
 		"vlan_twice": {VLANs: []switchcfg.VLANChange{
 			{Op: switchcfg.VLANCreate, ID: 50, Name: "a"}, {Op: switchcfg.VLANRename, ID: 50, Name: "b"}}},
 	}
@@ -286,5 +288,119 @@ func TestManagementUnknown(t *testing.T) {
 		{IfIndex: 193, Alias: ptr("printer")}}})
 	if err != nil || len(plan.Warnings) != 0 {
 		t.Errorf("renaming a port needs no acknowledgement: %v %v", plan, err)
+	}
+}
+
+// steps lists the descriptions of a plan's steps.
+func steps(ss []switchcfg.Step) []string {
+	var out []string
+	for _, s := range ss {
+		out = append(out, s.Description)
+	}
+	return out
+}
+
+func eq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestHybridUntaggedOnly is the change recorded on a VSP 8404 (VOSS 8.10.1):
+// a port tags, carries one VLAN untagged and is ready for tagged ones.
+func TestHybridUntaggedOnly(t *testing.T) {
+	plan, _, st := roundTrip(t, switchcfg.Change{Ports: []switchcfg.PortChange{
+		{IfIndex: 193, VLANs: &switchcfg.PortVLANs{Untagged: 10, Hybrid: true}},
+	}})
+	if v, _ := st["rcVlanPortPerformTagging"]["193"].AsInt(); v != tagAll {
+		t.Errorf("tagging = %d", v)
+	}
+	if v, _ := st["rcVlanPortUntagDefaultVlan"]["193"].AsInt(); v != truthTrue {
+		t.Errorf("untag default VLAN = %d", v)
+	}
+	if v, _ := st["rcVlanPortDefaultVlanId"]["193"].AsInt(); v != 10 {
+		t.Errorf("PVID = %d", v)
+	}
+	if got := members(t, st, "10"); len(got) != 2 || got[0] != 193 {
+		t.Errorf("VLAN 10 members = %v", got)
+	}
+	if got := members(t, st, "1"); len(got) != 1 {
+		t.Errorf("VLAN 1 members = %v", got)
+	}
+	want := []string{"enable tagging", "remove VLAN members", "add VLAN members", "set PVIDs", "untag the default VLAN"}
+	if got := steps(plan.Steps); !eq(got, want) {
+		t.Errorf("steps = %v, want %v", got, want)
+	}
+	want = []string{"tag the default VLAN", "remove VLAN members", "add VLAN members", "set PVIDs", "disable tagging"}
+	if got := steps(plan.Inverse); !eq(got, want) {
+		t.Errorf("inverse = %v, want %v", got, want)
+	}
+	if !plan.SaveKnown || len(plan.Save) != 1 || plan.Save[0].Set[0].Instance() != "rcSysActionL1.0" || plan.Save[0].Set[0].Value.Int != 7 {
+		t.Errorf("save = %v %+v", plan.SaveKnown, plan.Save)
+	}
+}
+
+func TestHybridWithTagged(t *testing.T) {
+	_, _, st := roundTrip(t, switchcfg.Change{Ports: []switchcfg.PortChange{
+		{IfIndex: 194, VLANs: &switchcfg.PortVLANs{Untagged: 10, Tagged: []int{30, 20}}},
+	}})
+	if v, _ := st["rcVlanPortUntagDefaultVlan"]["194"].AsInt(); v != truthTrue {
+		t.Errorf("untag default VLAN = %d", v)
+	}
+	for _, vid := range []string{"10", "20", "30"} {
+		found := false
+		for _, i := range members(t, st, vid) {
+			found = found || i == 194
+		}
+		if !found {
+			t.Errorf("1/3 not in VLAN %s", vid)
+		}
+	}
+}
+
+// From hybrid back to access and to trunk: the default VLAN is tagged again
+// before the memberships change.
+func TestFromHybrid(t *testing.T) {
+	for name, to := range map[string]switchcfg.PortVLANs{"access": {Untagged: 1}, "trunk": {Tagged: []int{10, 20}}} {
+		sw := switchcfgtest.New()
+		snap := sw.VOSS()
+		sw.Put("rcVlanPortPerformTagging", "193", switchcfg.Int(tagAll))
+		sw.Put("rcVlanPortUntagDefaultVlan", "193", switchcfg.Int(truthTrue))
+		plan, err := VOSS().Plan(context.Background(), sw, snap, switchcfg.Change{Ports: []switchcfg.PortChange{{IfIndex: 193, VLANs: &to}}})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		apply(t, sw, plan.Steps)
+		verify(t, sw, plan.Expected)
+		if v, _ := sw.Get("rcVlanPortUntagDefaultVlan", "193"); v.Int != truthFalse {
+			t.Errorf("%s: untag default VLAN = %d", name, v.Int)
+		}
+		if got := steps(plan.Steps); got[0] != "tag the default VLAN" {
+			t.Errorf("%s: steps = %v", name, got)
+		}
+	}
+}
+
+func TestHexTextRefused(t *testing.T) {
+	sw := switchcfgtest.New()
+	snap := sw.VOSS()
+	for _, c := range []switchcfg.Change{
+		{Ports: []switchcfg.PortChange{{IfIndex: 193, Alias: ptr("0x41")}}},
+		{VLANs: []switchcfg.VLANChange{{Op: switchcfg.VLANCreate, ID: 50, Name: "0Xff"}}},
+	} {
+		if _, err := VOSS().Plan(context.Background(), sw, snap, c); !switchcfg.IsRefused(err) {
+			t.Errorf("%+v: err = %v", c, err)
+		}
+	}
+	// An empty name is allowed (EDM sends it as "0x00:").
+	if _, err := VOSS().Plan(context.Background(), sw, snap, switchcfg.Change{Ports: []switchcfg.PortChange{
+		{IfIndex: 192, Alias: ptr("")}}}); err != nil && !switchcfg.IsRefused(err) {
+		t.Error(err)
 	}
 }

@@ -1,11 +1,12 @@
-# Switch configuration (phase 8, planned)
+# Switch configuration (phase 8)
 
 _Status: in progress on the branch `switch-config`. Steps 8.2–8.10 are implemented and run end
 to end against the mock switch (preview, apply, confirm, revert, automatic revert after the
-deadline); 8.6 still needs the VSP check of step 8.1. 8.12 (documentation and rules) is done.
-Open: 8.1 and 8.11, both on a VSP (checklist: section 9 of
-[hardware-tests.md](hardware-tests.md)). Without `configure.enabled: true` in `config.yaml`
-none of it is active._
+deadline). 8.1 (recording) is done on a VSP 8404 with VOSS 8.10.1.0 (2026-11-06), which also
+verified 8.6 (EDM writer) on hardware. 8.11 (hardware test) has a first run over the EDM
+channel on the same switch; open: the SNMP channel and VOSS 7.1 (checklist: section 9 of
+[hardware-tests.md](hardware-tests.md)). 8.12 (documentation and rules) is done. Without
+`configure.enabled: true` in `config.yaml` none of it is active._
 
 Admins change switch settings from the port dashboard, as in UniFi or Omada: click a port, set
 its VLANs, name and state; manage the switch's VLANs. The first version supports VSP/VOSS only.
@@ -27,8 +28,14 @@ feature changes that on purpose. The rules are:
 | Port VLANs | PVID / untagged VLAN, tagged VLANs |
 | Port | admin state (enable/disable), name (`ifAlias`) |
 | VLANs | create, rename, delete |
-| PoE | enable/disable per port |
+| PoE | enable/disable per port (SNMP only on VOSS, see below) |
 
+- **Port modes:** access, trunk and hybrid. A hybrid port tags its VLANs and also sends one
+  VLAN untagged (the PVID). On VOSS this is tagging on plus "untag default VLAN"
+  (`rcVlanPortUntagDefaultVlan`).
+- **PoE on VOSS:** VOSS's EDM has no PoE objects to write (only a read of
+  `pethPsePortDetectionStatus`). Over EDM a PoE change is refused (`no_poe`); it needs the
+  SNMP channel (POWER-ETHERNET).
 - **Switches:** VSP/VOSS (driver `voss`) only. ERS, TP-Link, SwOS, Cisco and generic Q-BRIDGE
   come later as separate steps.
 - **Permission:** role `admin` only.
@@ -64,7 +71,12 @@ feature changes that on purpose. The rules are:
 **Changes and assignments**
 
 - `Change` is made of:
-  - `PortChange{IfIndex, Admin*, Alias*, PVID*, Untagged*, Tagged*, PoE*}`;
+  - `PortChange{IfIndex, Admin*, Alias*, VLANs*, PoE*}`; the VLAN part is
+    `PortVLANs{Untagged, Tagged, Hybrid}` (the untagged VLAN is also the PVID). `Hybrid` means tagging on with an
+    untagged VLAN, even without tagged VLANs. The web form's mode "hybrid" sets it and needs
+    an untagged VLAN. The VOSS planner declares `Capabilities.Hybrid`; it needs
+    `rcVlanPortUntagDefaultVlan` to be readable, otherwise a hybrid port is refused
+    (`hybrid`);
   - `VLANChange{Op: create|rename|delete, ID, Name}`.
 - `Assignment{Name, Index, Value monitor.Value}` addresses an object by MIB name, like
   `monitor.Reader`.
@@ -124,9 +136,10 @@ feature changes that on purpose. The rules are:
    both win.
    - Steps: read, save to NVRAM, read again (state `confirmed`).
    - If the save fails, the state is `confirmed_unsaved` and the UI offers "save again".
-   - Until 8.1 has recorded how VOSS saves, the VOSS planner has no save action
-     (`SaveKnown = false`): a confirmed change ends as `confirmed_unsaved`, and the admin saves
-     on the switch.
+   - VOSS saves with `rcSysActionL1.0 = 7` (`saveRuntimeConfig`), recorded in 8.1. The VOSS
+     planner has `SaveKnown = true`: a confirmed change ends as `confirmed`.
+     `confirmed_unsaved` only happens when the save fails, or for a planner without a known
+     save action.
 7. **Revert** on deadline or "Revert".
    - The inverse plan is written (every step, even after an error: the values are absolute,
      and a step may fail only because the change was applied in part), then read back
@@ -223,7 +236,8 @@ device.
 
 ## Steps
 
-1. **8.1 Recording on a VSP.** Run each v1 action once by hand in EDM through the proxy.
+1. **8.1 Recording on a VSP.** _Done 2026-11-06 on a VSP 8404 with VOSS 8.10.1.0._ Run each
+   v1 action once by hand in EDM through the proxy.
    - Record the network traffic, and read the same objects over SNMP.
    - The result is the "Write recipes" section below: objects, index, encoding, order,
      answers, errors, the save action, and VOSS's tagging and STG quirks.
@@ -298,26 +312,54 @@ Later steps:
 
 ## Write recipes
 
-Known from EDM's own scripts (ERS 5600 webroot); to be confirmed on a VSP in step 8.1:
+Recorded 2026-11-06 on a VSP 8404 with VOSS 8.10.1.0, EDM over HTTPS. Sources: EDM's own
+JavaScript of VOSS 8.10, and `setVariables` requests sent to the switch by hand and read back
+over SNMP. The ERS 5600 webroot uses the same request format.
 
 | Item | Format |
 |---|---|
 | Request | `POST /jsp/setFormMibs.jsp`, form fields `command=setVariables`, `varNames`, `varValues`, `varCount`, `userId` |
-| Several variables | names and values joined by a TAB; `varCount` = their number |
+| Several variables | names and values joined by a TAB; `varCount` = their number; EDM sends at most 60 per request |
 | Names | `object.index` (`rcVlanPortMembers.10`, `ifAlias.192`; scalars `name.0`) |
 | Numbers and enums | decimal text |
-| PortSet | `0x` + two-digit hex octets joined by `:` (`0x00:40:80`); EDM sends an empty one as `0x00:00` and cuts the octets after the last set bit |
-| Text | as is |
-| Error answer | `snmpErrorStatus:<n>`, lines split by CR LF, third line `<errIndex>:<message>`; EDM treats any `snmpErrorStatus` as an error. `owdErrorStatus:` is an error too. |
+| PortSet | `0x` + lowercase hex octets joined by `:`; bit i = ifIndex i, most significant bit first; EDM cuts the trailing zero octets, an empty set is `0x00:00`; the switch answers with the full length |
+| Text | as is; **empty text is sent as `0x00:`**. A really empty value makes the VSP's web server hang (no answer). |
+| Success answer | `name:value` plus CR LF per variable, name without index (`ifAlias:uplink`) |
+| Error answer | `snmpErrorStatus:<n>`, CR LF, `snmpErrorIndex:<i>`, CR LF; no message. `<i>` is the position of the failed variable. |
+| Error codes | standard SNMP statuses, plus vendor codes on VOSS (seen: 12801 when creating VLAN 4090, a reserved ID). `owdErrorStatus:` is an error too. |
 | Logout | EDM's own logout also goes to `setFormMibs.jsp` (`command=logout`); ERS-Proxy uses `GET /logout.html` |
 
-Still open for 8.1:
+- The agent decodes text that starts with `0x` as hex. The planner therefore refuses port
+  names and VLAN names that start with `0x`.
+- ERS-Proxy encodes empty text as `0x00:`, parses `snmpErrorIndex` and names the standard SNMP
+  statuses in the error.
 
-- the answer to a successful write (the mock answers `snmpErrorStatus:0`, which EDM itself
-  would show as an error, so the real answer is probably different);
-- whether VOSS takes the same formats;
-- the tagging values and the order VOSS accepts for membership changes;
-- the columns needed to create a VLAN (STG/MSTI) and how VOSS saves its configuration;
-- whether VOSS's EDM serves POWER-ETHERNET (`pethPsePortAdminEnable`); without it, PoE
-  changes over EDM are refused (`no_poe`), over SNMP they work.
+VOSS objects:
 
+| Action | Objects |
+|---|---|
+| Port name | `ifAlias` |
+| Port admin state | `ifAdminStatus` (1 up, 2 down) |
+| Create VLAN | one request with `rcVlanRowStatus = 4` (createAndGo), `rcVlanType = 1` (byPort), `rcVlanName`, `rcVlanStgId = 1` |
+| Rename VLAN | `rcVlanName` |
+| Delete VLAN | `rcVlanRowStatus = 6` (destroy) |
+| Membership | `rcVlanPortMembers`; always the whole PortSet of the VLAN |
+| PVID | `rcVlanPortDefaultVlanId`; a port that leaves all its VLANs gets PVID 0, and 0 can be written |
+| Tagging | `rcVlanPortPerformTagging` is a TruthValue: 1 tag, 2 untag. There is no "untag PVID only" value. |
+| Untag default VLAN | its own object `rcVlanPortUntagDefaultVlan` (`1.3.6.1.4.1.2272.1.3.3.1.13`, TruthValue); CLI `untag-port-default-vlan` |
+| Save | `rcSysActionL1.0 = 7` (`saveRuntimeConfig`, `1.3.6.1.4.1.2272.1.1.86`); `rcSysLastRunTimeConfigSave` changes after it |
+
+- **Port modes:** access = tagging 2 and untag default 2. Trunk = tagging 1 and untag default 2. Hybrid = tagging
+  1, untag default 1 and the PVID.
+- **Order VOSS accepts (the planner's order):** create the VLAN (one request, see above);
+  rename; enable tagging; add members; set the PVID; set untag default VLAN. Back: tag the
+  default VLAN, remove members, PVID, disable tagging, delete the VLAN.
+- EDM also sends `rcVlanColor` and `rcVlanPortMembers` when it creates a VLAN. Neither is
+  needed.
+- **Management VLAN:** EDM does not serve the IP address table, so over EDM every port change
+  shows the `mgmt_unknown` warning (as designed).
+- **PoE:** VOSS's EDM has no PoE objects to write, so PoE over EDM stays refused (`no_poe`).
+  The VSP 8404 has no PoE anyway.
+
+Still open: the same recipes on VOSS 7.1 (VSP 4850GTS), and the SNMP channel (needs write
+credentials on the switch).

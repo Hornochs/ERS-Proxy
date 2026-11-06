@@ -11,6 +11,7 @@
         <option value="vsp-edm"{{if eq $d.Kind "vsp-edm"}} selected{{end}}>{{.T "kind.vsp-edm"}}</option>
         <option value="edm-direct"{{if eq $d.Kind "edm-direct"}} selected{{end}}>{{.T "kind.edm-direct"}}</option>
         <option value="swos"{{if eq $d.Kind "swos"}} selected{{end}}>{{.T "kind.swos"}}</option>
+        <option value="gwn"{{if eq $d.Kind "gwn"}} selected{{end}}>{{.T "kind.gwn"}}</option>
         <option value="link"{{if eq $d.Kind "link"}} selected{{end}}>{{.T "kind.link"}}</option>
       </select>
     </label>
@@ -43,7 +44,8 @@
       </label>
       {{if and $d.HasCredentials (not $d.SwOS)}}<label class="check proxy-only"><input type="checkbox" name="auto_login" value="1"{{if $d.AutoLogin}} checked{{end}}> {{.T "devices.auto_login"}}</label>{{end}}
       <p class="muted small span-all proxy-only">{{.T "devices.isolation_hint"}}</p>
-      <p class="muted small span-all direct-only">{{.T "devices.direct_hint"}}</p>
+      <p class="muted small span-all direct-only not-gwn">{{.T "devices.direct_hint"}}</p>
+      <p class="muted small span-all gwn-only">{{.T "devices.direct_hint_gwn"}}</p>
     </fieldset>
     <fieldset>
       <legend>{{.T "devices.monitoring"}}</legend>
@@ -171,7 +173,7 @@
   {{end}}
 </section>
 <section class="card">
-  <h3>{{if $d.SwOS}}{{.T "devices.login_swos"}}{{else if $d.Proxied}}{{.T "devices.login"}}{{else}}{{.T "devices.login_direct"}}{{end}}</h3>
+  <h3>{{if or $d.SwOS $d.GWN}}{{.T "devices.login_swos"}}{{else if $d.Proxied}}{{.T "devices.login"}}{{else}}{{.T "devices.login_direct"}}{{end}}</h3>
   <p class="small muted">{{if $d.HasCredentials}}{{.T "devices.login_stored"}}{{else if $d.SwOS}}{{.T "devices.login_none_swos"}}{{else}}{{.T "devices.login_none"}}{{end}}</p>
   <form method="post" action="/admin/devices/{{$d.ID}}/credentials" class="form-grid" autocomplete="off">
     <input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -185,7 +187,7 @@
     </div>
   </form>
   <p class="small muted">{{.T "devices.login_hint"}}</p>
-  {{if $d.SwOS}}<p class="small muted">{{.T "devices.login_hint_swos"}}</p>{{else if not $d.Proxied}}<p class="small muted">{{.T "devices.login_hint_direct"}}</p>{{end}}
+  {{if $d.SwOS}}<p class="small muted">{{.T "devices.login_hint_swos"}}</p>{{else if $d.GWN}}<p class="small muted">{{.T "devices.login_hint_gwn"}}</p>{{else if not $d.Proxied}}<p class="small muted">{{.T "devices.login_hint_direct"}}</p>{{end}}
 </section>
 </div>
 {{end}}

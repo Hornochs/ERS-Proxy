@@ -63,17 +63,15 @@ func (f *fakeMonitor) counts() (holds, releases, polls int) {
 	return f.holds, f.releases, len(f.polled)
 }
 
-// savingPlanner wraps a planner and adds a known save step.
-type savingPlanner struct{ switchcfg.Planner }
+// unsavedPlanner wraps a planner that does not know how its switch saves.
+type unsavedPlanner struct{ switchcfg.Planner }
 
-func (p savingPlanner) Plan(ctx context.Context, r monitor.Reader, snap *monitor.Snapshot, c switchcfg.Change) (*switchcfg.Plan, error) {
+func (p unsavedPlanner) Plan(ctx context.Context, r monitor.Reader, snap *monitor.Snapshot, c switchcfg.Change) (*switchcfg.Plan, error) {
 	plan, err := p.Planner.Plan(ctx, r, snap, c)
 	if err != nil {
 		return nil, err
 	}
-	plan.SaveKnown = true
-	plan.Save = []switchcfg.Step{{Description: "save", Set: []switchcfg.Assignment{
-		{Name: "rcSysAction", Value: switchcfg.Int(9)}}}}
+	plan.SaveKnown, plan.Save = false, nil
 	return plan, nil
 }
 
@@ -213,7 +211,7 @@ var moveAccess = switchcfg.Change{Ports: []switchcfg.PortChange{{IfIndex: 193, V
 var toTrunk = switchcfg.Change{Ports: []switchcfg.PortChange{{IfIndex: 194, VLANs: &switchcfg.PortVLANs{Tagged: []int{20, 30}}}}}
 
 func TestApplyConfirmUnsaved(t *testing.T) {
-	e := newEnv(t, vossPlanners())
+	e := newEnv(t, switchcfg.NewPlanners(unsavedPlanner{rcplan.VOSS()}))
 	ctx := context.Background()
 	pv := e.preview(moveAccess)
 	if e.sw.WriteCount() != 0 {
@@ -249,7 +247,7 @@ func TestApplyConfirmUnsaved(t *testing.T) {
 }
 
 func TestApplyConfirmSaved(t *testing.T) {
-	e := newEnv(t, switchcfg.NewPlanners(savingPlanner{rcplan.VOSS()}))
+	e := newEnv(t, vossPlanners())
 	pv := e.preview(moveAccess)
 	rec, err := e.apply(pv)
 	if err != nil {
@@ -266,8 +264,8 @@ func TestApplyConfirmSaved(t *testing.T) {
 	if e.sw.WriteCount() != before+1 {
 		t.Fatalf("writes = %d, want %d", e.sw.WriteCount(), before+1)
 	}
-	if v, ok := e.sw.Get("rcSysAction", ""); !ok || v.Int != 9 {
-		t.Errorf("rcSysAction = %v %v", v, ok)
+	if v, ok := e.sw.Get("rcSysActionL1", ""); !ok || v.Int != 7 {
+		t.Errorf("rcSysActionL1 = %v %v", v, ok)
 	}
 }
 
@@ -441,7 +439,8 @@ func TestConfirmRevertRace(t *testing.T) {
 		if _, err := e.mgr.Revert(ctx, rec.ID, e.who); !errors.Is(err, switchcfg.ErrNotPending) {
 			t.Errorf("Revert: %v", err)
 		}
-		if st := e.state(rec.ID).State; st != store.ChangeConfirmedUnsaved {
+		// The VOSS planner knows how to save (rcSysActionL1).
+		if st := e.state(rec.ID).State; st != store.ChangeConfirmed {
 			t.Errorf("state = %s", st)
 		}
 		if sameState(e.orig, e.sw.Snapshot()) {

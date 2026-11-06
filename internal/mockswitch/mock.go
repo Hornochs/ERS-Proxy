@@ -86,7 +86,7 @@ type Mock struct {
 	SetValues []string
 	// SetError, if set, is called with the variable names of every
 	// setVariables request. A non-empty result is sent as the answer and
-	// nothing is applied, e.g. "snmpErrorStatus:10\r\n\r\n1:wrongValue".
+	// nothing is applied, e.g. "snmpErrorStatus:10\r\nsnmpErrorIndex:1\r\n".
 	SetError func(names []string) string
 }
 
@@ -291,7 +291,7 @@ func (m *Mock) set(w http.ResponseWriter, q url.Values) {
 		}
 	}
 	if m.opts.Data == nil {
-		reply(w, "snmpErrorStatus:0\r\n")
+		reply(w, setAnswer(nl, vl))
 		return
 	}
 	if len(nl) != len(vl) || q.Get("varCount") != strconv.Itoa(len(nl)) {
@@ -305,13 +305,29 @@ func (m *Mock) set(w http.ResponseWriter, q url.Values) {
 	if err := m.opts.Data.Apply(vars); err != nil {
 		var f *SetFailure
 		if errors.As(err, &f) {
-			reply(w, fmt.Sprintf("snmpErrorStatus:%d\r\n\r\n%d:%s", f.Status, f.Index, f.Msg))
+			// As a VSP answers (VOSS 8.10): status and index, no message.
+			reply(w, fmt.Sprintf("snmpErrorStatus:%d\r\nsnmpErrorIndex:%d\r\n", f.Status, f.Index))
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	reply(w, "snmpErrorStatus:0\r\n")
+	reply(w, setAnswer(nl, vl))
+}
+
+// setAnswer is the answer of a VSP to a successful setVariables: each name
+// without its index and the value written, "ifAlias:uplink\r\n".
+func setAnswer(names, values []string) string {
+	var sb strings.Builder
+	for i, n := range names {
+		base, _, _ := strings.Cut(n, ".")
+		v := ""
+		if i < len(values) {
+			v = values[i]
+		}
+		sb.WriteString(base + ":" + v + "\r\n")
+	}
+	return sb.String()
 }
 
 func (m *Mock) jsp(w http.ResponseWriter, q url.Values) {

@@ -8,8 +8,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Changing switch settings from the dashboard (phase 8, experimental, VSP/VOSS only, not yet
-  verified on hardware; see `docs/switch-configuration.md`). Off unless `configure.enabled:
+- Grandstream GWN switches (verified read-only on a GWN7721, firmware 1.0.7.128): device kind
+  `gwn` (the browser opens the switch's web interface directly in a tab; the stored login is
+  the web login), driver `grandstream` and data source `gwn`, which reads VLANs, duplex, LLDP
+  and LAGs from the switch's web API (read commands only, one login per poll because the switch
+  allows one web session per account) and counters from SNMP. Use an `http://` address: on the
+  tested firmware a TCP reset on the HTTPS port reboots the switch, so never port-scan GWN
+  switches.
+- Changing switch settings from the dashboard (phase 8, experimental, VSP/VOSS only, verified
+  on one VSP over EDM only; see `docs/switch-configuration.md`). Off unless `configure.enabled:
   true` is set in `config.yaml` and the device has a configuration channel (EDM or SNMP);
   admins only. Port VLANs, port state, port name, VLANs and PoE; every change is previewed,
   applied "commit confirmed" and reverted automatically unless it is confirmed in time.
@@ -22,6 +29,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Writers for phase 8: over EDM (`setVariables`, formats from EDM's own scripts,
   tested against the mock switch) and over SNMP SET (tested against snmpsim), plus encrypted
   SNMP write credentials that are cleared when the switch's address or SNMP port changes.
+- Phase 8 verified on a VSP 8404 with VOSS 8.10.1.0 over the EDM channel (2026-11-06): port
+  VLANs, port name and state, VLAN create/rename/delete, confirm, revert, automatic revert
+  after the deadline and after a restart. SNMP channel and VOSS 7.1 still to be tested.
+- Hybrid ports for VOSS in the configuration planner (`PortVLANs.Hybrid`; the port form's mode
+  "hybrid" needs an untagged VLAN).
+- A confirmed change on VOSS is now saved to NVRAM (`rcSysActionL1` = 7) and ends as
+  `confirmed`, not `confirmed_unsaved`.
 
 ### Changed
 
@@ -34,10 +48,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- SNMP GET requests now carry at most 4 objects (was 10), for agents that silently drop larger
+  requests (Grandstream GWN).
 - A busy switch during the server-side EDM login (HTTP 5xx, such as VOSS's `503 Server Too
   Busy` when all web sessions are taken) counted as a rejected password: the dashboard's EDM
   data source then stopped logging in until the login was stored again. It is now a temporary
   error and the next poll tries again.
+- Setting an empty port name over EDM hung the VSP's web server: empty text is now sent as
+  `0x00:`, as EDM does. Port and VLAN names starting with `0x` are refused.
+- Hybrid ports on VOSS (tagging with "untag default VLAN") showed as trunks on the dashboard;
+  the VOSS driver now reads `rcVlanPortUntagDefaultVlan` and shows them as hybrid.
+- EDM write errors now include the failed variable (`snmpErrorIndex`) and the name of the
+  standard SNMP error status.
 
 - "Open in EDM" for a port left `TypeError` messages in the console on VOSS 8 while EDM was
   still loading; the shim now calls EDM's click handlers directly and keeps such early failures

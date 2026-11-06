@@ -179,7 +179,8 @@ func (s *Switch) WriteCount() int {
 // VOSS fills the switch with a small VSP: ports 1/1-1/4 (ifIndex 192-195),
 // VLAN 1 (ports 1/1, 1/2 untagged), VLAN 10 (port 1/3 untagged), VLAN 20
 // and 30 (port 1/4 tagged), VLAN 100 with an IP address (management, port
-// 1/1 is also member), PoE on 1/1-1/4. It returns the matching snapshot.
+// 1/1 is also member), PoE on 1/1-1/4, rcVlanPortUntagDefaultVlan false on
+// 1/1-1/3 (1/4 has none). It returns the matching snapshot.
 func (s *Switch) VOSS() *monitor.Snapshot {
 	bits := func(ifIndexes ...int) monitor.Value {
 		b := make([]byte, 64)
@@ -214,6 +215,9 @@ func (s *Switch) VOSS() *monitor.Snapshot {
 		}
 		s.Put("rcVlanPortDefaultVlanId", idx, switchcfg.Int(pvid))
 		s.Put("rcVlanPortPerformTagging", idx, switchcfg.Int(tag))
+		if ifi != 195 { // 1/4 has none, like a firmware without it
+			s.Put("rcVlanPortUntagDefaultVlan", idx, switchcfg.Int(2))
+		}
 		snap.Ports = append(snap.Ports, &monitor.Port{IfIndex: ifi, Unit: 1, Number: n + 1, Name: "1/" + itoa(n+1),
 			Physical: true, Admin: "up", Oper: "up", PVID: pvid})
 	}

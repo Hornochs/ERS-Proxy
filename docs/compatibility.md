@@ -12,7 +12,7 @@
 | Model | Firmware | Transport | Status | Verified how |
 |---|---|---|---|---|
 | VSP 4850GTS | VOSS 7.1.10.0 | HTTPS only (TLS 1.2, RSA key exchange, no secure renegotiation) | works | Hardware test 2026-11-04 in Chromium 156: as `vsp-edm` embedded through the proxy – manual login and auto-login, navigation tree, Chassis and VLAN dialogs, a write (`sysLocation`, reverted), EDM's own logout; as `edm-direct` opened directly in a tab; SNMP and EDM data source of the port dashboard (`voss` driver) |
-| VSP 8404 | VOSS 8.10.1.0 | HTTPS only (TLS 1.2, ECDHE with AES-GCM) | works | Hardware test 2026-11-04 in Chromium 156 as `vsp-edm`: auto-login (its login page sets no `auth` cookie – fixed), device view, "Open in EDM" for ports 1/15 and 1/1; SNMP data of the port dashboard (`voss` driver: slots 1 and 2, VLANs, tagging, LLDP). The factory login `rwa` was rejected by EDM; another login works |
+| VSP 8404 | VOSS 8.10.1.0 | HTTPS only (TLS 1.2, ECDHE with AES-GCM) | works | Hardware test 2026-11-04 in Chromium 156 as `vsp-edm`: auto-login (its login page sets no `auth` cookie – fixed), device view, "Open in EDM" for ports 1/15 and 1/1; SNMP data of the port dashboard (`voss` driver: slots 1 and 2, VLANs, tagging, LLDP). The factory login `rwa` was rejected by EDM; another login works. Configuration changes (phase 8, opt-in) verified over the EDM channel 2026-11-06 from an isolated test instance: port VLAN, port name and state, VLAN create/rename/delete, apply with confirm, revert, automatic revert after the deadline and after a restart, save on confirm (`rcSysActionL1`); hybrid ports; PoE not possible over EDM. SNMP channel not tested |
 
 Two ways to use a VSP: `vsp-edm` serves its EDM through the proxy like an ERS (embedded in the
 workspace, auto-login, certificate pinned on the server); `edm-direct` lets the browser open it
@@ -58,6 +58,41 @@ portal. Differences to EDM:
   without Q-BRIDGE, MIKROTIK-MIB serial number, firmware version and SFP table. No VLANs, no
   EtherLike, no LLDP. `sysObjectID` is `1.3.6.1.4.1.14988.2`.
 
+## Grandstream switches (kind `gwn`)
+
+| Model | Firmware | Transport | Status | Verified how |
+|---|---|---|---|---|
+| GWN7721 (8 × 2.5G, 2 × SFP+) | 1.0.7.128 | HTTPS and HTTP | works (monitoring, read-only) | Hardware test 2026-11-06, read-only: SNMP and the `gwn` data source of the port dashboard (`grandstream` driver); ports, speed, VLAN membership (ports 3–8 tagged in VLAN 100, untagged in VLAN 1; port 2 PVID 100), PVID, LLDP neighbour and rates matched the switch's web interface; a poll takes about 2 s |
+| other GWN switches (GWN7720, GWN781x, PoE models such as GWN7721P) | 1.0.x | HTTPS and HTTP | expected to work | Same web API and SNMP agent family; PoE is not read, and on larger models `ifIndex` might differ from the port number |
+
+The kind `gwn` opens the switch's own web interface directly in a tab (like `edm-direct`, never
+framed); the server talks to the switch itself for the data source. Behaviour of the switch (seen
+on a GWN7721, firmware 1.0.7.128):
+
+- **A TCP reset on port 443 reboots the switch.** A single connection to the HTTPS port that
+  the client closes with a TCP reset (RST) restarts the whole switch (down about 50 s). A port
+  scan (nmap connect scan) triggers it reliably; a normal close (FIN), TLS handshakes and HTTP
+  on port 80 do not. The `gwn` client always reads answers to the end so that it never resets
+  a connection, ERS-Proxy's health check closes normally, and `http://` is recommended as the
+  device address (the web API is the same on port 80). **Do not run port scans against GWN
+  switches.** Still to be checked on a second unit (a hardware fault is not excluded) and
+  reported to Grandstream.
+- **One web session per account.** While someone is logged in to the web interface with the
+  same account, a login is refused ("user already logged in"). The client therefore logs in,
+  reads and logs out within each poll and treats "in use" and "locked" as temporary. A rejected
+  login is not retried until the stored login or address changes, because the switch locks the
+  account after several failed logins. A dedicated account for ERS-Proxy, if the switch offers
+  one, avoids collisions with administrators.
+- **SNMP drops requests with more than four variable bindings** (GET, GETNEXT and GETBULK),
+  without an answer. ERS-Proxy asks for at most four scalars per GET (all devices).
+- **SNMP agent:** system group, IF-MIB with 64-bit counters (`ifIndex` = port number),
+  BRIDGE-MIB, from Q-BRIDGE only the scalars and `dot1qPvid` (no VLAN table); no EtherLike,
+  LLDP, IEEE8023-LAG or POWER-ETHERNET. VLANs, duplex, LLDP and LAGs therefore need the `gwn`
+  data source. The web API has no byte counters, so traffic rates come from SNMP.
+- **Not verified on hardware:** LAGs (none configured), PoE models, larger GWN models, VLANs in
+  port-based mode (the web interface then shows no 802.1Q VLANs; the switch page says so).
+- Configuration changes (phase 8) are not supported for GWN.
+
 Other ERS families with the same EDM (Ext JS 2.2) – for example ERS 3500, 4000/4800, 5500 and
 5900 – are expected to need the same patches. Patches match file content, not paths or
 versions, so they apply wherever the affected code appears. Please report results with the
@@ -73,10 +108,11 @@ fallback). All drivers are read-only.
 | `generic` | any device | IF-MIB, BRIDGE-MIB, Q-BRIDGE-MIB, LLDP, LAG, PoE (RFC 3621) | synthetic fixtures only |
 | `ers` | `1.3.6.1.4.1.45.` | standard MIBs plus RAPID-CITY VLANs, MLT and S5-CHASSIS stack units | ERS 5632FD (one unit, 6.6.3.015): ports, VLAN bitmaps, tagging, LLDP, unit data; numbering of stack units 2–8 not yet verified |
 | `cisco` | `1.3.6.1.4.1.9.` | standard MIBs plus CISCO-VTP-MIB (VLANs, trunks) and CISCO-VLAN-MEMBERSHIP-MIB (`vmVlan`); Q-BRIDGE fallback without VTP | synthetic fixtures only |
-| `voss` | `1.3.6.1.4.1.2272.` (RAPID-CITY: VSP, also older ERS 8000) or `sysDescr` starting with `VSP-` | standard MIBs plus RAPID-CITY VLANs (`rcVlanPortMembers`, PVID, tagging), port speed/duplex (`rcPortTable`) and MLT; front-panel slot/port from `ifName` (`1/1`, ifIndex 192 = 1/1); chassis serial and release from `rcChasSerialNumber`/`sysDescr` | VSP 4850GTS (VOSS 7.1.10.0) over SNMP and EDM: ports, speed/duplex, VLANs, PVID, tagging, LLDP. MLT membership and channelized ports not yet verified |
+| `voss` | `1.3.6.1.4.1.2272.` (RAPID-CITY: VSP, also older ERS 8000) or `sysDescr` starting with `VSP-` | standard MIBs plus RAPID-CITY VLANs (`rcVlanPortMembers`, PVID, tagging), port speed/duplex (`rcPortTable`) and MLT; front-panel slot/port from `ifName` (`1/1`, ifIndex 192 = 1/1); chassis serial and release from `rcChasSerialNumber`/`sysDescr` | VSP 4850GTS (VOSS 7.1.10.0) over SNMP and EDM: ports, speed/duplex, VLANs, PVID, tagging, LLDP. Hybrid ports (tagging with "untag default VLAN", `rcVlanPortUntagDefaultVlan`) are read since 2026-11-06 (VSP 8404, VOSS 8.10.1.0). MLT membership and channelized ports not yet verified |
 | `tplink` | `1.3.6.1.4.1.11863.` | standard MIBs plus TPLINK-DOT1Q-VLAN-MIB (port table: PVID, LAG; VLAN table: names, tagged/untagged port lists as text); front-panel ports from `ifName`; Q-BRIDGE fallback | T1500G-8T and Omada SG2210P (firmware 5.20): ports, PVID, tagging, LAG, LLDP; PoE (status, class, power per port, budget) from TPLINK-POWER-OVER-ETHERNET-MIB, POWER-ETHERNET-MIB as fallback. The SNMP agents are slow and drop requests: a poll takes 30–60 s |
 
 | `swos` | `1.3.6.1.4.1.14988.2` (MikroTik SwOS) or `sysDescr` containing `SwOS` | SNMP: IF-MIB and MIKROTIK-MIB serial/firmware; front-panel number = ifIndex. With the `swos` data source also VLANs, PVID, derived tagging, duplex and LAGs ("Trunk1"…) from SwOS's web API, served as Q-BRIDGE, EtherLike and IEEE8023-LAG objects | CRS305-1G-4S+ (SwOS 2.18) over SNMP and the SwOS data source: ports, speed, duplex, VLANs, PVID, traffic. LAG membership and the tagging of hybrid ports not yet seen on hardware |
+| `grandstream` | `1.3.6.1.4.1.42397` (bare enterprise OID, also prefix `1.3.6.1.4.1.42397.`) or `sysDescr` starting with `GWN` (score 90) | SNMP: IF-MIB (64-bit counters), `dot1qPvid`; front-panel number from `ifName` (`2.5GE1`, `SFP+10`: type prefix + number), unit 1; model and firmware from Grandstream scalars `1.3.6.1.4.1.42397.1.3.1.1`/`.1.3.1.4` (no public MIB); LAGs named `LAG<n>`. With the `gwn` data source also VLANs (egress/untagged bitmaps), names, duplex, LLDP neighbours, LAGs and the serial number from the switch's web API | GWN7721 (1.0.7.128) over SNMP and the `gwn` data source: ports, speed, VLANs, PVID, tagging, LLDP, rates. LAGs, PoE models and larger models not yet seen on hardware |
 
 Please attach `ers-proxy snmp-capture` output to a device report to get a driver verified.
 

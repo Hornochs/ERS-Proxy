@@ -14,13 +14,16 @@ poller ──> Driver.Collect(ctx, Reader) ──> *monitor.Snapshot ──> Rat
               Reader (by MIB object name)
               ├── snmpsrc  (SNMP GET/walk; names -> OIDs via monitor.Objects)
               ├── edmsrc   (EDM getFormMibs/getTableMibs; ERS and VSP, experimental)
-              └── swossrc  (MikroTik SwOS web API, served under standard object names)
+              ├── swossrc  (MikroTik SwOS web API, served under standard object names)
+              └── gwnsrc   (Grandstream GWN web API plus SNMP, served under standard object names)
 ```
 
 - **Reader** (`internal/monitor/monitor.go`) reads objects by MIB name:
   `Scalars(ctx, names...)` and `Columns(ctx, names...)`, which walks table columns and merges
   them by row index (`"12"`, `"1.5"`; split with `monitor.Ints`). Objects the agent does not
-  implement are simply absent. Drivers must not depend on the transport.
+  implement are simply absent. `snmpsrc` asks for at most four scalars per GET
+  (`maxGetOIDs`), because some agents (Grandstream GWN) silently drop requests with more
+  variable bindings. Drivers must not depend on the transport.
 - **`monitor.Objects`** (`internal/monitor/objects.go`) maps every object name to its OID without
   instance suffix. Scalars are read with `.0` appended. `snmp-capture` walks exactly these
   objects. The EDM reader can only serve the tables listed in `edmsrc.Tables`; everything else
@@ -36,7 +39,7 @@ poller ──> Driver.Collect(ctx, Reader) ──> *monitor.Snapshot ──> Rat
   - `SkipPoE` leaves POWER-ETHERNET-MIB out; a driver with a vendor PoE table calls
     `Base.ReadPoE` only when that table is missing (`tplink` does this).
 - **`Driver`** interface:
-  - `Name()`: the identifier stored with a device (`generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`).
+  - `Name()`: the identifier stored with a device (`generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`, `grandstream`).
   - `Match(System) int`: how well the driver fits. `0` not at all, `10` generic fallback, `90`
     probably (for example by `sysDescr`), `100` made for this vendor (by `sysObjectID` prefix).
   - `Collect(ctx, Reader) (*Snapshot, error)`.
@@ -97,7 +100,7 @@ VLANs on the wrong ports.
    }
    ```
    Look at `generic.go` (Q-BRIDGE), `tplink.go` (vendor table with text port lists), `cisco.go` (vendor VLAN tables
-   with Q-BRIDGE fallback) `ers.go` (own numbering, PortSet bitmaps, stack units), `voss.go` (slot/port from `ifName`, reuses the ERS RAPID-CITY helpers) and `swos.go` (standard MIBs only; VLANs come from a reader that translates a web API, see below). A failing
+   with Q-BRIDGE fallback) `ers.go` (own numbering, PortSet bitmaps, stack units), `voss.go` (slot/port from `ifName`, reuses the ERS RAPID-CITY helpers) `swos.go` (standard MIBs only; VLANs come from a reader that translates a web API, see below) and `grandstream.go` (port numbers from `ifName`, model/firmware from vendor scalars; VLANs, duplex and LLDP from `gwnsrc`). A failing
    optional read should add a note and keep going; only a missing system group or interface
    table is an error.
 4. **Register** it in `drivers.All()` (`generic.go`). Give `Match` a score of 100 for the
@@ -144,6 +147,20 @@ system group, IF-MIB, `dot3StatsDuplexStatus`, `dot1dBasePortIfIndex`,
 `dot1qVlanStaticName`, current egress/untagged port lists). Whatever the vendor does not store
 (SwOS has no per-VLAN tagging) is derived in the reader and documented there; the driver adds a
 note to the snapshot. The `swos` driver then works the same over SNMP and over the web API.
+
+`gwnsrc` combines two sources for Grandstream GWN switches. The web API
+(`internal/gwn`, allow-listed read commands only) serves the system group, IF-MIB without
+counters (`ifName` = the web interface's label, `ifAlias` = port description),
+`dot3StatsDuplexStatus`, `dot1dBasePortIfIndex`, `dot3adAggPortAttachedAggID` (1000 + LAG number),
+Q-BRIDGE (`dot1qPvid`, VLAN names, current egress/untagged port lists) and LLDP
+(`lldpRemSysName`, `lldpRemPortId` at index `0.<port>.1`). The web API has no byte counters, so
+when SNMP credentials are stored for the device the reader reads the counters (octets, errors,
+discards, `ifLastChange`) and every object the web API lacks from SNMP; without them there are
+no traffic rates. A failing SNMP read does not fail the poll: it becomes a note
+(`Reader.SourceNotes`), which the `grandstream` driver copies into `Snapshot.Notes`. The switch
+allows one web session per account, so the client logs in, reads and logs out within each poll
+(`gwn.ErrBusy` is retried next poll, `gwn.ErrLogin` not until the login changes). Tests use the
+fake switch `internal/gwn/gwntest`.
 
 ## Rules
 

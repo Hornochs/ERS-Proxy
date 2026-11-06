@@ -60,6 +60,7 @@ var serverCmd = &cobra.Command{
 		edm := newEDMSource(proxy, e.key)
 		mon.OpenEDM = edm.open
 		mon.OpenSwOS = newSwOSSource(proxy)
+		mon.OpenGWN = newGWNSource(proxy, e.key).open
 		rec := history.New(e.db, e.cfg.Monitor.Retention, log)
 		mon.Sink = rec
 		ui.Monitor = mon

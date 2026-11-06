@@ -61,6 +61,11 @@ type PortVLANs struct {
 	Untagged int `json:"untagged"`
 	// Tagged lists the VLANs the port carries tagged.
 	Tagged []int `json:"tagged,omitempty"`
+	// Hybrid keeps the port tagging even when Tagged is empty: it sends
+	// Untagged untagged and is ready for tagged VLANs (VOSS:
+	// "encapsulation dot1q" with "untag-port-default-vlan"). An untagged VLAN
+	// together with tagged ones is always hybrid.
+	Hybrid bool `json:"hybrid,omitempty"`
 }
 
 // VLAN operations.
@@ -251,6 +256,9 @@ func (m Planners) For(driver string) (Planner, bool) {
 var Objects = map[string]string{
 	// RAPID-CITY rcVlanTable (1.3.6.1.4.1.2272.1.3.2.1.x).
 	"rcVlanRowStatus": "1.3.6.1.4.1.2272.1.3.2.1.20",
+	// RAPID-CITY rcSysActionL1.0: 7 saves the running configuration (VOSS,
+	// what EDM's "Save configuration" sends).
+	"rcSysActionL1": "1.3.6.1.4.1.2272.1.1.86",
 }
 
 // OID returns the OID of an object name (without instance).

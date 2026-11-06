@@ -182,6 +182,8 @@ func lessOrEqualPrefix(prefix, oid []int) bool {
 // monitor.Objects).
 var writeObjects = map[string]string{
 	"rcVlanRowStatus": "1.3.6.1.4.1.2272.1.3.2.1.20",
+	// rcSysActionL1.0 = 7 saves the running configuration (VOSS).
+	"rcSysActionL1": "1.3.6.1.4.1.2272.1.1.86",
 }
 
 // rcVlanTableOID is the prefix of the columns of rcVlanTable; the row index
@@ -220,7 +222,7 @@ func objectOID(name string) (string, bool) {
 }
 
 // Apply writes the variables like the switch does: all or none. Integers are
-// decimal, octet strings plain text, PortSets "0x" plus hex octets separated
+// decimal, octet strings plain text ("0x00:" for an empty one), PortSets "0x" plus hex octets separated
 // by colons. A rcVlanRowStatus of createAndGo(4) creates the VLAN row with
 // an empty PortSet; destroy(6) removes every rcVlanTable column of the row.
 // Rows are written in order, so a request may create a row and then fill it.
@@ -298,7 +300,16 @@ func applyVar(vals map[string]record, v SetVar) *SetFailure {
 		}
 		vals[full] = record{tag: "4x", val: hex.EncodeToString(b)}
 	case octetObjects[name]:
-		vals[full] = record{tag: "4", val: v.Value}
+		// EDM sends an empty text as "0x00:"; a truly empty value makes a
+		// VOSS web server hang, which the mock answers with an error.
+		switch v.Value {
+		case "0x00:":
+			vals[full] = record{tag: "4", val: ""}
+		case "":
+			return &SetFailure{Status: 7, Msg: "wrongType (empty value)"}
+		default:
+			vals[full] = record{tag: "4", val: v.Value}
+		}
 	default:
 		if _, err := strconv.ParseInt(v.Value, 10, 64); err != nil {
 			return &SetFailure{Status: 7, Msg: "wrongType"}

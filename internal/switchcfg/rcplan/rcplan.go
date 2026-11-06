@@ -3,10 +3,18 @@
 // (bit i = ifIndex i), PVID and tagging per port in rcVlanPortTable, port
 // state and name in IF-MIB, PoE in POWER-ETHERNET-MIB.
 //
-// Unverified until step 8.1 records EDM's own writes on a VSP: the tagging
-// values (1 = tag all, 2 = untag all), the order VOSS accepts for membership
-// changes, the columns needed to create a VLAN (STG/MSTI), and how VOSS
-// saves its configuration (SaveKnown stays false until then).
+// VOSS facts, from the EDM of VOSS 8.10 and checked on a VSP 8404 with VOSS
+// 8.10.1 (step 8.1):
+//   - rcVlanPortPerformTagging is a TruthValue (1 = tag, 2 = untag); a
+//     tagging port with rcVlanPortUntagDefaultVlan = 1 sends its PVID
+//     untagged (hybrid);
+//   - the switch takes the steps in the order transition writes them: create
+//     a VLAN with rcVlanRowStatus createAndGo, rcVlanType, rcVlanName and
+//     rcVlanStgId in one request; switch tagging on, add members (whole
+//     PortSet), set the PVID, then untag the default VLAN; back in reverse;
+//   - a port that leaves all its VLANs gets PVID 0, and 0 can be written;
+//   - rcSysActionL1.0 = 7 saves the configuration;
+//   - VOSS's EDM has no PoE objects to write (POWER-ETHERNET over SNMP only).
 package rcplan
 
 import (
@@ -27,6 +35,12 @@ const (
 	untagAll = 2
 )
 
+// TruthValue (rcVlanPortUntagDefaultVlan).
+const (
+	truthTrue  = 1
+	truthFalse = 2
+)
+
 // VLAN interfaces of VOSS have ifIndex 2048 + VLAN ID.
 const vossVLANIfIndex = 2048
 
@@ -39,7 +53,12 @@ type Planner struct {
 	caps   switchcfg.Capabilities
 	// vlanIfIndex maps a VLAN ID to the ifIndex of its VLAN interface.
 	vlanIfIndex func(vid int) int
+	// save makes the running configuration permanent (nil = unknown).
+	save []switchcfg.Step
 }
+
+// saveRuntimeConfig is rcSysActionL1's value for "save configuration".
+const saveRuntimeConfig = 7
 
 // VOSS returns the planner for VSP switches with VOSS (driver voss).
 func VOSS() *Planner {
@@ -47,13 +66,14 @@ func VOSS() *Planner {
 		driver: "voss",
 		caps: switchcfg.Capabilities{
 			Admin: true, Alias: true, PoE: true, PortVLANs: true,
-			// Untagged plus tagged VLANs ("untag-port-default-vlan") is not
-			// offered until 8.1 has shown how VOSS stores it.
-			Hybrid:     false,
+			// Tagging with the PVID untagged ("untag-port-default-vlan").
+			Hybrid:     true,
 			VLANCreate: true, VLANRename: true, VLANDelete: true,
 			MaxAlias: 64, MaxVLANName: 64,
 		},
 		vlanIfIndex: func(vid int) int { return vossVLANIfIndex + vid },
+		save: []switchcfg.Step{{Description: "save the configuration", Set: []switchcfg.Assignment{
+			{Name: "rcSysActionL1", Value: switchcfg.Int(saveRuntimeConfig)}}}},
 	}
 }
 
@@ -75,6 +95,7 @@ type state struct {
 	vlans map[int]*vlanRow
 	pvid  map[int]int
 	tag   map[int]int
+	untag map[int]int    // rcVlanPortUntagDefaultVlan: 1 true, 2 false; missing = not readable
 	admin map[int]int    // ifAdminStatus: 1 up, 2 down
 	alias map[int]string // ifAlias
 	poe   map[string]int // pethPsePortAdminEnable by "group.port": 1 on, 2 off
@@ -82,8 +103,8 @@ type state struct {
 }
 
 func (s *state) clone() *state {
-	c := &state{vlans: map[int]*vlanRow{}, pvid: map[int]int{}, tag: map[int]int{}, admin: map[int]int{},
-		alias: map[int]string{}, poe: map[string]int{}, size: s.size}
+	c := &state{vlans: map[int]*vlanRow{}, pvid: map[int]int{}, tag: map[int]int{}, untag: map[int]int{},
+		admin: map[int]int{}, alias: map[int]string{}, poe: map[string]int{}, size: s.size}
 	for k, v := range s.vlans {
 		r := *v
 		r.members = append([]byte(nil), v.members...)
@@ -94,6 +115,9 @@ func (s *state) clone() *state {
 	}
 	for k, v := range s.tag {
 		c.tag[k] = v
+	}
+	for k, v := range s.untag {
+		c.untag[k] = v
 	}
 	for k, v := range s.admin {
 		c.admin[k] = v
@@ -116,8 +140,8 @@ func atoi(idx string) int {
 
 // read loads the current values from the switch.
 func (p *Planner) read(ctx context.Context, r monitor.Reader, c switchcfg.Change) (*state, map[int]bool, error) {
-	s := &state{vlans: map[int]*vlanRow{}, pvid: map[int]int{}, tag: map[int]int{}, admin: map[int]int{},
-		alias: map[int]string{}, poe: map[string]int{}}
+	s := &state{vlans: map[int]*vlanRow{}, pvid: map[int]int{}, tag: map[int]int{}, untag: map[int]int{},
+		admin: map[int]int{}, alias: map[int]string{}, poe: map[string]int{}}
 	vt, err := r.Columns(ctx, "rcVlanName", "rcVlanPortMembers", "rcVlanType", "rcVlanStgId")
 	if err != nil {
 		return nil, nil, fmt.Errorf("read VLANs: %w", err)
@@ -146,6 +170,17 @@ func (p *Planner) read(ctx context.Context, r monitor.Reader, c switchcfg.Change
 		i := atoi(idx)
 		s.pvid[i], _ = row["rcVlanPortDefaultVlanId"].AsInt()
 		s.tag[i], _ = row["rcVlanPortPerformTagging"].AsInt()
+	}
+	if p.caps.Hybrid {
+		// Its own request: a switch that cannot read it still gets the
+		// other columns, and hybrid changes are then refused.
+		if ut, err := r.Columns(ctx, "rcVlanPortUntagDefaultVlan"); err == nil {
+			for idx, row := range ut {
+				if v, ok := row["rcVlanPortUntagDefaultVlan"].AsInt(); ok && (v == truthTrue || v == truthFalse) {
+					s.untag[atoi(idx)] = v
+				}
+			}
+		}
 	}
 	var needIf, needPoE bool
 	for _, pc := range c.Ports {
@@ -358,6 +393,12 @@ func (p *Planner) Plan(ctx context.Context, r monitor.Reader, snap *monitor.Snap
 			if err != nil {
 				return nil, err
 			}
+			if _, ok := before.untag[pc.IfIndex]; want.untag == truthTrue && !ok {
+				return nil, switchcfg.Refuse("hybrid", "port %s: rcVlanPortUntagDefaultVlan could not be read", name)
+			}
+			if _, ok := before.untag[pc.IfIndex]; ok {
+				after.untag[pc.IfIndex] = want.untag
+			}
 			for vid, v := range after.vlans {
 				v.members = switchcfg.SetBit(v.members, pc.IfIndex, want.member[vid], after.size)
 			}
@@ -391,6 +432,7 @@ func (p *Planner) Plan(ctx context.Context, r monitor.Reader, snap *monitor.Snap
 	}
 	plan.Expected = expected(after, before)
 	plan.Before = expected(before, after)
+	plan.Save, plan.SaveKnown = p.save, p.save != nil
 	return plan, nil
 }
 
@@ -398,16 +440,21 @@ type portWant struct {
 	member map[int]bool
 	pvid   int
 	tag    int
+	untag  int // rcVlanPortUntagDefaultVlan
 }
 
 func (p *Planner) portVLANs(after *state, deleted map[int]bool, v switchcfg.PortVLANs) (portWant, error) {
-	w := portWant{member: map[int]bool{}}
+	w := portWant{member: map[int]bool{}, untag: truthFalse}
 	exists := func(vid int) bool { return after.vlans[vid] != nil && !deleted[vid] }
 	if v.Untagged == 0 && len(v.Tagged) == 0 {
 		return w, switchcfg.Refuse("no_vlan", "a port needs at least one VLAN")
 	}
-	if v.Untagged != 0 && len(v.Tagged) > 0 && !p.caps.Hybrid {
-		return w, switchcfg.Refuse("hybrid", "an untagged VLAN together with tagged VLANs is not supported yet")
+	hybrid := v.Untagged != 0 && (v.Hybrid || len(v.Tagged) > 0)
+	if v.Hybrid && v.Untagged == 0 {
+		return w, switchcfg.Refuse("no_untagged", "a hybrid port needs an untagged VLAN")
+	}
+	if hybrid && !p.caps.Hybrid {
+		return w, switchcfg.Refuse("hybrid", "an untagged VLAN together with tagged VLANs is not supported")
 	}
 	if v.Untagged != 0 {
 		if !exists(v.Untagged) {
@@ -427,9 +474,12 @@ func (p *Planner) portVLANs(after *state, deleted map[int]bool, v switchcfg.Port
 		}
 		w.member[vid] = true
 	}
-	if len(v.Tagged) == 0 {
+	switch {
+	case hybrid:
+		w.tag, w.pvid, w.untag = tagAll, v.Untagged, truthTrue
+	case len(v.Tagged) == 0:
 		w.tag, w.pvid = untagAll, v.Untagged
-	} else {
+	default:
 		w.tag = tagAll
 		w.pvid = v.Untagged
 		if w.pvid == 0 {
@@ -453,6 +503,10 @@ func checkText(s string, max int, code string) error {
 	if len(s) > max {
 		return switchcfg.Refuse(code, "at most %d characters", max)
 	}
+	// EDM's agent decodes text that starts with "0x" as hex octets.
+	if strings.HasPrefix(strings.ToLower(s), "0x") {
+		return switchcfg.Refuse(code, "must not start with 0x")
+	}
 	for _, c := range s {
 		if c < 0x20 || c > 0x7e {
 			return switchcfg.Refuse(code, "only printable ASCII characters")
@@ -472,6 +526,9 @@ func describeVLANs(v switchcfg.PortVLANs) string {
 	var parts []string
 	if v.Untagged != 0 {
 		parts = append(parts, fmt.Sprintf("untagged %d", v.Untagged))
+	}
+	if v.Hybrid && len(v.Tagged) == 0 {
+		parts = append(parts, "tagging on")
 	}
 	if len(v.Tagged) > 0 {
 		t := append([]int(nil), v.Tagged...)
@@ -540,6 +597,14 @@ func transition(from, to *state) []switchcfg.Step {
 	}
 	add("enable tagging", as)
 
+	as = nil
+	for _, i := range sortedKeys(to.untag) {
+		if to.untag[i] == truthFalse && from.untag[i] == truthTrue {
+			as = append(as, switchcfg.Assignment{Name: "rcVlanPortUntagDefaultVlan", Index: idx(i), Value: switchcfg.Int(truthFalse)})
+		}
+	}
+	add("tag the default VLAN", as)
+
 	// Remove members (VLANs that disappear lose all of theirs).
 	mid := map[int][]byte{}
 	as = nil
@@ -585,6 +650,14 @@ func transition(from, to *state) []switchcfg.Step {
 		}
 	}
 	add("set PVIDs", as)
+
+	as = nil
+	for _, i := range sortedKeys(to.untag) {
+		if to.untag[i] == truthTrue && from.untag[i] != truthTrue {
+			as = append(as, switchcfg.Assignment{Name: "rcVlanPortUntagDefaultVlan", Index: idx(i), Value: switchcfg.Int(truthTrue)})
+		}
+	}
+	add("untag the default VLAN", as)
 
 	as = nil
 	for _, i := range sortedKeys(to.tag) {
@@ -660,6 +733,11 @@ func expected(s, other *state) []switchcfg.Assignment {
 	for _, i := range sortedKeys(s.tag) {
 		if s.tag[i] != other.tag[i] {
 			out = append(out, switchcfg.Assignment{Name: "rcVlanPortPerformTagging", Index: idx(i), Value: switchcfg.Int(s.tag[i])})
+		}
+	}
+	for _, i := range sortedKeys(s.untag) {
+		if s.untag[i] != other.untag[i] {
+			out = append(out, switchcfg.Assignment{Name: "rcVlanPortUntagDefaultVlan", Index: idx(i), Value: switchcfg.Int(s.untag[i])})
 		}
 	}
 	for _, i := range sortedKeys(s.admin) {

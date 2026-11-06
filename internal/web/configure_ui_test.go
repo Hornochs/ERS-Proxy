@@ -388,6 +388,21 @@ func TestConfigureRefusedAndErrors(t *testing.T) {
 	if v := f.lastChange.Ports[0].VLANs; v == nil || v.Untagged != 0 || len(v.Tagged) != 1 || v.Tagged[0] != 10 {
 		t.Fatalf("trunk change %+v", f.lastChange.Ports[0])
 	}
+	// Hybrid with only an untagged VLAN: the port tags, but carries the VLAN
+	// untagged (VOSS "untag-port-default-vlan").
+	form = portForm()
+	form.Set("vlan_mode", "hybrid")
+	form.Set("alias", h.ui.Monitor.(fakeMonitor).st.Snap.Port(1).Alias)
+	if r := h.postForm(base+"/configure/preview", form); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("hybrid: %d", r.StatusCode)
+	}
+	if v := f.lastChange.Ports[0].VLANs; v == nil || v.Untagged != 10 || len(v.Tagged) != 0 || !v.Hybrid {
+		t.Fatalf("hybrid change %+v", f.lastChange.Ports[0].VLANs)
+	}
+	form.Set("untagged", "0")
+	if resp, _ = h.postBody(base+"/configure/preview", form); resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("hybrid without untagged VLAN: %d", resp.StatusCode)
+	}
 }
 
 func TestConfigureWarningsNeedAck(t *testing.T) {

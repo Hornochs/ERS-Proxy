@@ -96,12 +96,14 @@ var Objects = map[string]string{
 	"vmVlan":                      "1.3.6.1.4.1.9.9.68.1.2.2.1.2",
 
 	// Avaya/Nortel ERS (RAPID-CITY, S5-CHASSIS); from the firmware's agent table
-	"rcVlanName":                  "1.3.6.1.4.1.2272.1.3.2.1.2",
-	"rcVlanPortMembers":           "1.3.6.1.4.1.2272.1.3.2.1.11",
-	"rcVlanStgId":                 "1.3.6.1.4.1.2272.1.3.2.1.9",
-	"rcVlanType":                  "1.3.6.1.4.1.2272.1.3.2.1.10",
-	"rcVlanPortDefaultVlanId":     "1.3.6.1.4.1.2272.1.3.3.1.7",
-	"rcVlanPortPerformTagging":    "1.3.6.1.4.1.2272.1.3.3.1.8",
+	"rcVlanName":               "1.3.6.1.4.1.2272.1.3.2.1.2",
+	"rcVlanPortMembers":        "1.3.6.1.4.1.2272.1.3.2.1.11",
+	"rcVlanStgId":              "1.3.6.1.4.1.2272.1.3.2.1.9",
+	"rcVlanType":               "1.3.6.1.4.1.2272.1.3.2.1.10",
+	"rcVlanPortDefaultVlanId":  "1.3.6.1.4.1.2272.1.3.3.1.7",
+	"rcVlanPortPerformTagging": "1.3.6.1.4.1.2272.1.3.3.1.8",
+	// VOSS only: TruthValue, 1 = a tagging port sends its PVID untagged.
+	"rcVlanPortUntagDefaultVlan":  "1.3.6.1.4.1.2272.1.3.3.1.13",
 	"rcPortOperDuplex":            "1.3.6.1.4.1.2272.1.4.10.1.1.13",
 	"rcPortOperSpeed":             "1.3.6.1.4.1.2272.1.4.10.1.1.15",
 	"rcMltName":                   "1.3.6.1.4.1.2272.1.17.10.1.2",
@@ -120,13 +122,17 @@ var Objects = map[string]string{
 	// RAPID-CITY scalars of VSP/VOSS switches
 	"rcSysVersion":       "1.3.6.1.4.1.2272.1.1.7",
 	"rcChasSerialNumber": "1.3.6.1.4.1.2272.1.4.2",
+	// Grandstream GWN switch scalars below 1.3.6.1.4.1.42397.1.3.1 (no public
+	// MIB; names chosen here, meaning seen on a GWN7721)
+	"gwnProductModel":    "1.3.6.1.4.1.42397.1.3.1.1",
+	"gwnFirmwareVersion": "1.3.6.1.4.1.42397.1.3.1.4",
 }
 
 // Scalar reports whether a name is a scalar object (read with ".0").
 func Scalar(name string) bool {
 	switch name {
 	case "sysDescr", "sysObjectID", "sysUpTime", "sysName", "sysLocation", "rcSysVersion", "rcChasSerialNumber",
-		"mtxrSerialNumber", "mtxrFirmwareVersion":
+		"mtxrSerialNumber", "mtxrFirmwareVersion", "gwnProductModel", "gwnFirmwareVersion":
 		return true
 	}
 	return false

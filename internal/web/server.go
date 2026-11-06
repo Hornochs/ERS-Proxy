@@ -108,10 +108,10 @@ var funcs = template.FuncMap{
 	"openModes": func() []string { return []string{config.OpenEmbedded, config.OpenTab, config.OpenWindow} },
 	"tlsModes":  func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
 	"monitorSources": func() []string {
-		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS}
+		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN}
 	},
 	"monitorDrivers": func() []string {
-		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS}
+		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS, store.DriverGWN}
 	},
 	"snmpVersions":   func() []string { return snmp.Versions },
 	"securityLevels": func() []string { return snmp.SecurityLevels },

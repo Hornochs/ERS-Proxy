@@ -6,7 +6,8 @@
 writes generic.snmprec (a Q-BRIDGE switch), ers5600.snmprec (an ERS 5600
 two-unit stack with RAPID-CITY VLANs and no Q-BRIDGE), cisco.snmprec (VTP) and
 tplink.snmprec (Q-BRIDGE), voss.snmprec (VSP 4850GTS on VOSS 7.1) and
-swos.snmprec (MikroTik CRS305 on SwOS 2.18). All values are made up;
+swos.snmprec (MikroTik CRS305 on SwOS 2.18) and
+grandstream.snmprec (Grandstream GWN7721). All values are made up;
 only the OIDs are real. The community of each agent is its file name.
 """
 import os
@@ -288,7 +289,10 @@ def voss():
     ports = [(192, "1/1", True, True, 1000), (193, "1/2", True, True, 1000), (194, "1/3", True, True, 1000),
              (195, "1/4", False, True, 0), (196, "1/5", False, False, 0), (197, "1/6", True, True, 1000),
              (240, "1/49", True, True, 10000), (241, "1/50", True, True, 10000)]
-    tagging = {192: 1, 193: 2, 194: 2, 195: 2, 196: 2, 197: 4, 240: 2, 241: 2}
+    # VOSS: rcVlanPortPerformTagging is a TruthValue (1 tag, 2 untag); a hybrid
+    # port tags and has rcVlanPortUntagDefaultVlan = 1 (PVID untagged).
+    tagging = {192: 1, 193: 2, 194: 2, 195: 2, 196: 2, 197: 1, 240: 2, 241: 2}
+    untag_default = {197}
     pvid = {192: 10, 193: 10, 194: 20, 195: 10, 196: 1, 197: 10, 240: 1, 241: 1}
     for idx, name, up, admin, mbps in ports:
         kind = "10GBaseSFP" if mbps == 10000 else "1000BaseTX"
@@ -300,6 +304,7 @@ def voss():
         a.i(f"1.3.6.1.4.1.2272.1.4.10.1.1.15.{idx}", mbps if up else 0)
         a.i(f"1.3.6.1.4.1.2272.1.3.3.1.7.{idx}", pvid[idx])
         a.i(f"1.3.6.1.4.1.2272.1.3.3.1.8.{idx}", tagging[idx])
+        a.i(f"1.3.6.1.4.1.2272.1.3.3.1.13.{idx}", 1 if idx in untag_default else 2)
         a.i(f"1.0.8802.1.1.2.1.3.7.1.2.{idx}", 5)
         a.s(f"1.0.8802.1.1.2.1.3.7.1.3.{idx}", name)
     vlans = {1: "Default", 10: "Office", 20: "Voice"}
@@ -337,6 +342,33 @@ def swos():
     a.write("swos.snmprec")
 
 
+def grandstream():
+    """Grandstream GWN7721 (firmware 1.0.7) as seen on real hardware:
+    sysObjectID is the bare enterprise OID, IF-MIB with 64-bit counters
+    (ifName "2.5GE1" ... "SFP+10"), BRIDGE-MIB, from Q-BRIDGE only the scalars
+    and dot1qPvid, and Grandstream's model and firmware scalars. No EtherLike,
+    LAG, LLDP, PoE or VLAN table."""
+    a = Agent()
+    system(a, "GWN7721", "1.3.6.1.4.1.42397", "gwn-lab")
+    gs = "1.3.6.1.4.1.42397.1.3.1"
+    a.s(f"{gs}.1.0", "GWN7721")
+    a.s(f"{gs}.2.0", "gwn-lab")
+    a.s(f"{gs}.4.0", "1.0.7.1")
+    # (ifIndex, name, link up, Mbit/s, alias, admin up, PVID)
+    ports = [(1, "2.5GE1", True, 2500, "office", True, 1), (2, "2.5GE2", True, 1000, "camera", True, 100),
+             (3, "2.5GE3", False, 2500, "", False, 1), (4, "2.5GE4", False, 2500, "", True, 1),
+             (9, "SFP+9", True, 10000, "uplink", True, 1), (10, "SFP+10", False, 0, "", True, 1)]
+    for idx, name, up, mbps, alias, admin_up, pvid in ports:
+        interface(a, idx, name, name, 6, up, mbps, alias=alias, admin_up=admin_up,
+                  in_octets=idx * 1000000, out_octets=idx * 3000000)
+        a.i(f"1.3.6.1.2.1.17.1.4.1.2.{idx}", idx)
+        a.i(f"1.3.6.1.2.1.17.7.1.4.5.1.1.{idx}", pvid, 66)
+    a.i("1.3.6.1.2.1.17.7.1.1.1.0", 1)  # dot1qVlanVersionNumber
+    a.i("1.3.6.1.2.1.17.7.1.1.2.0", 4094)  # dot1qMaxVlanId
+    a.i("1.3.6.1.2.1.17.7.1.1.4.0", 2, 66)  # dot1qNumVlans
+    a.write("grandstream.snmprec")
+
+
 def demo(source, target):
     """A copy of an agent with growing counters (snmpsim "numeric" variation),
     for demonstrations: traffic between about 1 and 80 Mbit/s per port."""
@@ -364,5 +396,6 @@ if __name__ == "__main__":
     tplink_qbridge()
     voss()
     swos()
+    grandstream()
     demo("ers5600.snmprec", "demo-ers5600.snmprec")
     demo("generic.snmprec", "demo-generic.snmprec")

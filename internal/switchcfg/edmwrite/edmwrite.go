@@ -2,7 +2,8 @@
 // ("SNMP over HTTP"): one POST of the command setVariables to
 // /jsp/setFormMibs.jsp per step, over the device's shared edmsession.Session.
 //
-// The formats come from EDM's own JavaScript (ERS 5600 firmware webroot):
+// The formats come from EDM's own JavaScript (ERS 5600 webroot and the EDM of
+// VOSS 8.10) and were checked on a VSP 8404 with VOSS 8.10.1 (step 8.1):
 //   - form fields command=setVariables, varNames, varValues and varCount, plus
 //     userId, which the session adds;
 //   - several variables are joined with a TAB in varNames and in varValues;
@@ -10,15 +11,17 @@
 //     scalar);
 //   - integers and enums are decimal text, text objects (ifAlias, rcVlanName)
 //     plain text, PortSet bitmaps "0x" plus two-digit lowercase hex octets
-//     joined with ":" ("0x00:40:80"); EDM sends an empty PortSet as "0x00:00";
-//   - an error answer contains "snmpErrorStatus:<n>" (lines separated by
-//     "\r\n", the third line may be "<errIndex>:<message>") or
-//     "owdErrorStatus:<n>".
+//     joined with ":" ("0x00:40:80"); EDM sends an empty PortSet as "0x00:00"
+//     and an empty text as "0x00:" (an empty value makes a VSP's web server
+//     hang); the switch decodes text that starts with "0x" as hex, so planners
+//     refuse such text;
+//   - a VSP answers a successful write with "name:value\r\n" per variable,
+//     and an error with "snmpErrorStatus:<n>\r\nsnmpErrorIndex:<i>\r\n";
+//     EDM's own parser also knows a third line "<errIndex>:<message>" and
+//     "owdErrorStatus:<n>". Any answer without an error marker is success.
 //
-// Not verified on a switch yet (step 8.1): what the success answer looks like
-// (we accept "snmpErrorStatus:0" and an answer without any error marker), and
-// whether VOSS and ERS take the same formats. Until then this package is
-// tested against internal/mockswitch only.
+// ERS switches are expected to take the same formats (same EDM code), but
+// this has not been tried on one yet.
 package edmwrite
 
 import (
@@ -117,6 +120,9 @@ func encodeValue(a switchcfg.Assignment) (string, error) {
 		if Binary[a.Name] {
 			return hexOctets(v.Bytes), nil
 		}
+		if len(v.Bytes) == 0 {
+			return "0x00:", nil // EDM's empty text
+		}
 		// Text with a TAB, CR or LF would break the framing; it is refused
 		// rather than hex-encoded, because EDM has no text objects with them.
 		if err := checkField(string(v.Bytes)); err != nil {
@@ -174,6 +180,9 @@ func (e *SetError) Error() string {
 		kind = "owdErrorStatus"
 	}
 	s := fmt.Sprintf("switch rejected the write: %s %d", kind, e.Status)
+	if name := statusNames[e.Status]; name != "" && !e.OWD {
+		s += " (" + name + ")"
+	}
 	if e.Index > 0 {
 		s += fmt.Sprintf(" at variable %d", e.Index)
 	}
@@ -183,7 +192,14 @@ func (e *SetError) Error() string {
 	return s
 }
 
+// statusNames are the SNMP error statuses (RFC 3416) a write may get.
+var statusNames = map[int]string{1: "tooBig", 2: "noSuchName", 3: "badValue", 4: "readOnly", 5: "genErr",
+	6: "noAccess", 7: "wrongType", 8: "wrongLength", 9: "wrongEncoding", 10: "wrongValue", 11: "noCreation",
+	12: "inconsistentValue", 13: "resourceUnavailable", 14: "commitFailed", 15: "undoFailed",
+	16: "authorizationError", 17: "notWritable", 18: "inconsistentName"}
+
 var (
+	snmpIndex  = regexp.MustCompile(`snmpErrorIndex:(\d+)`)
 	snmpStatus = regexp.MustCompile(`snmpErrorStatus:([+|-]?\d+)`)
 	owdStatus  = regexp.MustCompile(`owdErrorStatus:([+|-]?\d+)`)
 )
@@ -209,6 +225,9 @@ func ParseAnswer(text string) error {
 		return nil
 	}
 	e := &SetError{Status: n}
+	if m := snmpIndex.FindStringSubmatch(text); m != nil {
+		e.Index, _ = strconv.Atoi(m[1])
+	}
 	if len(lines) > 2 {
 		if idx, msg, ok := strings.Cut(strings.TrimSpace(lines[2]), ":"); ok {
 			if i, err := strconv.Atoi(idx); err == nil {

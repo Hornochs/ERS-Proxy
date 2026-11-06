@@ -221,6 +221,8 @@ func (s *Server) portConfig(r *http.Request, p *Page, st poller.Status, port *mo
 		}
 		f.Untagged = untaggedOf(port)
 		switch {
+		case c.Hybrid && port.Mode == "hybrid" && f.Untagged != 0:
+			f.Mode = "hybrid"
 		case len(port.Tagged) == 0 && f.Untagged != 0:
 			f.Mode = "access"
 		case len(port.Tagged) > 0 && f.Untagged == 0:
@@ -443,12 +445,20 @@ func (s *Server) portChange(r *http.Request, st poller.Status) (switchcfg.Change
 			if v.Untagged == 0 {
 				return switchcfg.Change{}, switchcfg.Refuse("no_untagged", "")
 			}
-		case "trunk", "hybrid":
+		case "hybrid":
+			// Tagging with an untagged VLAN, even without tagged VLANs yet.
+			if v.Untagged == 0 {
+				return switchcfg.Change{}, switchcfg.Refuse("no_untagged", "")
+			}
+			v.Hybrid = true
+		case "trunk":
 		default:
 			return switchcfg.Change{}, switchcfg.Refuse("empty", "")
 		}
 		cur := port.Untagged
-		if !(sameSet(cur, untaggedSet(v.Untagged)) && sameSet(port.Tagged, v.Tagged)) {
+		hybridNow := port.Mode == "hybrid"
+		if !(sameSet(cur, untaggedSet(v.Untagged)) && sameSet(port.Tagged, v.Tagged) &&
+			(mode != "hybrid" || hybridNow) && (mode != "access" || !hybridNow)) {
 			pc.VLANs = v
 		}
 	}
