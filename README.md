@@ -34,6 +34,24 @@ Avaya/Extreme ERS switches work in today's browsers.**
 
 ## Install
 
+### From the lan.party package repository (recommended)
+
+Set up the repository once, then install and update the package with your system's package manager.
+Instructions for Debian/Ubuntu, Fedora/RHEL/Rocky, Arch Linux and Alpine: **https://repo.lan.party**
+
+```sh
+curl -fsSL https://repo.lan.party/setup.sh | sudo sh   # or follow the manual steps on repo.lan.party
+
+sudo apt install ers-proxy      # Debian / Ubuntu
+sudo dnf install ers-proxy      # Fedora / RHEL / Rocky
+sudo pacman -S ers-proxy        # Arch Linux
+sudo apk add ers-proxy          # Alpine
+```
+
+New releases then arrive with your normal system updates (`apt upgrade`, `dnf upgrade`, `pacman -Syu`, `apk upgrade`).
+
+### Manual download from GitHub releases
+
 Packages are attached to each [GitHub release](https://github.com/lan-dot-party/ERS-Proxy/releases):
 
 ```bash
