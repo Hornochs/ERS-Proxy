@@ -62,7 +62,8 @@ sudo ers-proxy user create admin --role admin
 sudo systemctl enable --now ers-proxy
 ```
 
-Details, Docker and reverse proxy setup: [docs/installation.md](docs/installation.md),
+Details, Docker and reverse proxy setup: [docs/installation.md](docs/installation.md)
+(including [Docker Compose](docs/installation.md#docker-compose)),
 [docs/reverse-proxy.md](docs/reverse-proxy.md), [docs/configuration.md](docs/configuration.md).
 
 ## Supported devices

@@ -1,0 +1,74 @@
+name: Compose examples
+
+on:
+  pull_request:
+    paths: [compose.yaml, compose.bind.yaml, .github/workflows/compose.yml]
+  push:
+    branches: [main]
+    paths: [compose.yaml, compose.bind.yaml, .github/workflows/compose.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        file: [compose.yaml, compose.bind.yaml]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Prepare data directory (bind variant)
+        if: matrix.file == 'compose.bind.yaml'
+        run: mkdir -p data && sudo chown 100:101 data
+
+      - name: Start
+        env:
+          FILE: ${{ matrix.file }}
+        run: docker compose -f "$FILE" up -d
+
+      - name: Wait for healthy container
+        env:
+          FILE: ${{ matrix.file }}
+        run: |
+          cid=$(docker compose -f "$FILE" ps -q ers-proxy)
+          for i in $(seq 1 60); do
+            status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")
+            echo "health: $status"
+            [ "$status" = healthy ] && exit 0
+            sleep 2
+          done
+          echo "container did not become healthy within 120 s" >&2
+          exit 1
+
+      - name: Check /health
+        run: curl -fsS http://127.0.0.1:9050/health
+
+      - name: Create a user (data directory is writable)
+        env:
+          FILE: ${{ matrix.file }}
+        run: |
+          echo 'ci-test-password-1234' | docker compose -f "$FILE" exec -T ers-proxy \
+            ers-proxy user create ci-admin --role admin
+
+      - name: Check data files on the host (bind variant)
+        if: matrix.file == 'compose.bind.yaml'
+        run: |
+          ls -la data
+          test -f data/ers-proxy.db
+          test -f data/secret.key
+
+      - name: Print logs on failure
+        if: failure()
+        env:
+          FILE: ${{ matrix.file }}
+        run: docker compose -f "$FILE" logs --no-color
+
+      - name: Stop and clean up
+        if: always()
+        env:
+          FILE: ${{ matrix.file }}
+        run: docker compose -f "$FILE" down -v

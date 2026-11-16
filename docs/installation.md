@@ -49,6 +49,63 @@ docker exec -it ers-proxy ers-proxy user create admin --role admin
 The container listens on `0.0.0.0:9050` without TLS; put a reverse proxy in front of it
 ([reverse-proxy.md](reverse-proxy.md)). The secret key is created in the data volume.
 
+### Docker Compose
+
+The repository ships two Compose files with the same service; they differ only in where the
+data lives:
+
+| File | Data | Use it when |
+|---|---|---|
+| [`compose.yaml`](../compose.yaml) | named volume `ers-proxy-data` | You want the simplest setup; Docker manages the data. |
+| [`compose.bind.yaml`](../compose.bind.yaml) | local directory `./data` | You want the data visible on the host and easy to back up. The directory must belong to UID 100 / GID 101, the user inside the image. |
+
+Both publish port 9050 on `127.0.0.1` only (for a reverse proxy on the same host; change the
+mapping to `"9050:9050"` to expose it directly, without TLS), set `ERSPROXY_PUBLIC_URL` and
+restart the container unless you stop it. Edit `ERSPROXY_PUBLIC_URL` to the address the browser
+uses, and pin a version tag instead of `latest` for production. The container reaches the
+switches through the host's normal network routing; no special network mode is needed.
+
+Named volume:
+
+```bash
+docker compose up -d
+docker compose exec ers-proxy ers-proxy user create admin --role admin   # first admin
+docker compose logs -f ers-proxy
+docker compose pull && docker compose up -d                              # update
+```
+
+Local directory:
+
+```bash
+mkdir -p data && sudo chown 100:101 data      # once, before the first start
+docker compose -f compose.bind.yaml up -d
+docker compose -f compose.bind.yaml exec ers-proxy ers-proxy user create admin --role admin
+```
+
+For the other commands add `-f compose.bind.yaml` as well.
+
+**Backup.** `ers-proxy backup` writes a consistent copy of the database while the server runs
+(`VACUUM INTO`) to `backups/ers-proxy-<timestamp>.db` in the data directory, or to the file
+you name; it refuses to overwrite an existing file. It does **not** include `secret.key`.
+
+```bash
+docker compose exec ers-proxy ers-proxy backup
+```
+
+The key `secret.key` lives in the data directory next to `ers-proxy.db` and encrypts the stored
+switch passwords: back it up together with the database, and keep both private. A database
+backup without the key cannot be used to recover the stored passwords. With the local
+directory, back up `./data` (including the key); do not copy `ers-proxy.db` itself while the
+container runs, use the backup command above or stop the container first. With the named
+volume, copy `secret.key` and the files in `backups/` out of the volume, for example with
+`docker compose cp ers-proxy:/var/lib/ers-proxy/secret.key .`.
+
+Behind a reverse proxy, `public_url` must be exactly what the browser shows (see
+[reverse-proxy.md](reverse-proxy.md)). The proxy reaches the container over the Docker network
+or the published port, so its address as seen by ERS-Proxy usually is not `127.0.0.1`: mount
+your own `config.yaml` (the commented line in the Compose files) and list the proxy's address in
+`trusted_proxies`.
+
 ## From source
 
 ```bash
