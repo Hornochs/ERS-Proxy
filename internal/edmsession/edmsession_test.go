@@ -70,16 +70,16 @@ func (e *expiring) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/jsp/getFormMibs.jsp":
 		e.posts++
 		if e.always || e.posts == 1 {
-			w.Write([]byte(`<form name="submitForm">`))
+			_, _ = w.Write([]byte(`<form name="submitForm">`))
 			return
 		}
-		w.Write([]byte("sysName:x\r\n"))
+		_, _ = w.Write([]byte("sysName:x\r\n"))
 	default:
 		if r.Method == http.MethodPost {
 			e.logins++
 		}
 		http.SetCookie(w, &http.Cookie{Name: "auth", Value: "tok"})
-		w.Write([]byte(`<form name="submitForm"></form>`))
+		_, _ = w.Write([]byte(`<form name="submitForm"></form>`))
 	}
 }
 
