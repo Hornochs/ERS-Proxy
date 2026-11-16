@@ -133,9 +133,11 @@ versions, so they apply wherever the affected code appears. Please report result
 
 | Device | SSH server offers | Profile | Status |
 |---|---|---|---|
-| Avaya ERS 5600 (as reported by the maintainer for an ERS 5632FD, 6.6.3.015) | key exchange only `diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1`; host key `ssh-dss` | `legacy` (`auto` falls back) | verified against a fake device with exactly these algorithms (Chromium, 2026-11-16); hardware test pending |
+| ERS 5632FD, 6.6.3.015 | key exchange only `diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1`; host key `ssh-rsa` (SHA-1 signature) | `legacy` (`auto` falls back) | works (2026-11-16, Chromium): negotiated group14-sha1, `ssh-rsa`, `aes128-ctr`, `hmac-sha1`; stored web login; banner, Ctrl-Y, `show sys-info`, `logout` |
+| Other ERS 5600 units and firmware | as above, some with `ssh-dss` host keys (OpenSSH needs `-oHostKeyAlgorithms=+ssh-dss`) | `legacy` | `ssh-dss` verified against a fake device only |
 | Very old ERS firmware | as above, MAC only `hmac-md5` | `legacy` | HMAC-MD5 tested against a fake device; no such switch at hand |
-| VSP/VOSS, RouterOS 7, others | current algorithms | `modern` | hardware test pending |
+| MikroTik CRS310-8G+2S+, RouterOS 7.25.1 | current algorithms | `modern` | works (2026-11-16, Chromium): negotiated `mlkem768x25519-sha256`, `rsa-sha2-256`, `aes128-gcm@openssh.com`; stored web login; `/system resource print`, `/quit` |
+| VSP/VOSS, others | current algorithms | `modern` | hardware test pending |
 
 The ERS CLI starts with a banner and "Enter Ctrl-Y to begin"; press Ctrl-Y in the console.
 VOSS uses separate SSH accounts (store an SSH login of its own); ERS and RouterOS accept the
