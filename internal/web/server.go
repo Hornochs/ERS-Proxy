@@ -85,15 +85,20 @@ type DiagRow struct {
 
 var pageFiles = []string{
 	"login", "workspace", "account", "error", "trust", "dashboard",
-	"devices", "device_form", "groups", "users", "audit", "diagnostics", "switch", "port", "config_preview",
+	"devices", "device_form", "device_bulk", "groups", "users", "audit", "diagnostics", "switch", "port", "config_preview",
 }
 
 // New parses all templates.
 func New(a *app.App) (*Server, error) {
 	s := &Server{App: a, pages: map[string]*template.Template{}, login: auth.NewLoginLimiter(), reauth: auth.NewLoginLimiter()}
 	for _, name := range pageFiles {
-		t, err := template.New(name).Funcs(funcs).ParseFS(templateFS,
-			"templates/layout.html", "templates/"+name+".html")
+		files := []string{"templates/layout.html", "templates/" + name + ".html"}
+		if name == "device_bulk" {
+			// device_form.html provides the snmp_fields partial; the page's own
+			// "content" must be parsed last to win.
+			files = []string{"templates/layout.html", "templates/device_form.html", "templates/device_bulk.html"}
+		}
+		t, err := template.New(name).Funcs(funcs).ParseFS(templateFS, files...)
 		if err != nil {
 			return nil, fmt.Errorf("parse template %s: %w", name, err)
 		}
@@ -106,7 +111,10 @@ var funcs = template.FuncMap{
 	"themes":    func() []string { return store.Themes },
 	"hasPrefix": strings.HasPrefix,
 	"openModes": func() []string { return []string{config.OpenEmbedded, config.OpenTab, config.OpenWindow} },
-	"tlsModes":  func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
+	"deviceKinds": func() []string {
+		return []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindSwOS, store.KindGWN, store.KindRouterOS, store.KindLink}
+	},
+	"tlsModes": func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
 	"monitorSources": func() []string {
 		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN, store.MonitorRouterOS}
 	},
@@ -155,6 +163,8 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/admin/devices", s.devices)
 			r.Get("/admin/devices/new", s.deviceNew)
 			r.Post("/admin/devices", s.deviceCreate)
+			r.Get("/admin/devices/bulk", s.deviceBulkNew)
+			r.Post("/admin/devices/bulk", s.deviceBulkCreate)
 			r.Get("/admin/devices/export.{format}", s.deviceExport)
 			r.Post("/admin/devices/import", s.deviceImport)
 			r.Get("/admin/devices/{id}/edit", s.deviceEdit)

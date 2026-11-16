@@ -160,3 +160,56 @@ func TestDeviceCredentialsAutoLogin(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateDevices(t *testing.T) {
+	ctx := context.Background()
+	db := openTest(t)
+	mk := func(name, kind string) *Device {
+		return &Device{Name: name, Kind: kind, URL: "https://192.0.2.1", OpenMode: OpenInherit, Isolation: IsolationSandbox,
+			TLSMode: TLSAuto, MonitorSource: MonitorNone, MonitorDriver: "auto", MonitorInterval: 60, SNMPVersion: "v2c", SNMPPort: 161}
+	}
+	prepare := func(d *Device) error {
+		if d.ID == 0 {
+			t.Error("prepare called without ID")
+		}
+		if d.Kind != KindLink {
+			d.Credentials = []byte("login")
+		}
+		d.SNMPCredentials = []byte("snmp")
+		return nil
+	}
+	devs := []*Device{mk("a", KindERS), mk("b", KindLink)}
+	if err := db.CreateDevices(ctx, devs, prepare); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := db.DeviceByID(ctx, devs[0].ID)
+	b, _ := db.DeviceByID(ctx, devs[1].ID)
+	if !a.HasCredentials() || !a.AutoLogin || !a.HasSNMPCredentials() || b.HasCredentials() || b.AutoLogin || !b.HasSNMPCredentials() {
+		t.Fatalf("stored: %+v %+v", a, b)
+	}
+
+	// An error in the second device rolls back the first.
+	boom := errors.New("boom")
+	n := 0
+	err := db.CreateDevices(ctx, []*Device{mk("c", KindERS), mk("d", KindERS)}, func(*Device) error {
+		if n++; n == 2 {
+			return boom
+		}
+		return nil
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("error %v", err)
+	}
+	if all, _ := db.ListDevices(ctx); len(all) != 2 {
+		t.Fatalf("%d devices after rollback, want 2", len(all))
+	}
+	// An insert error (invalid group) also rolls back.
+	bad := mk("f", KindERS)
+	bad.GroupID = 9999
+	if err := db.CreateDevices(ctx, []*Device{mk("e", KindERS), bad}, nil); err == nil {
+		t.Fatal("expected a foreign key error")
+	}
+	if all, _ := db.ListDevices(ctx); len(all) != 2 {
+		t.Fatalf("%d devices after rollback, want 2", len(all))
+	}
+}

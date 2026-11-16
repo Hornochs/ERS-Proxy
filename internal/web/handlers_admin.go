@@ -117,23 +117,13 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request) {
 	// The switch login and SNMP access can be entered right away. They are
 	// checked before the device is created; they can only be encrypted once
 	// the device has its ID (associated data).
-	login := devices.Credentials{Username: strings.TrimSpace(r.PostFormValue("login_username")),
-		Password: r.PostFormValue("login_password")}
-	withLogin := d.Upstream() && (login.Username != "" || login.Password != "")
-	if withLogin && (login.Username == "" || login.Password == "") {
-		s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "login_missing")
-		return
-	}
-	version, snmpCreds, withSNMP := readSNMP(r, d.SNMPVersion)
+	acc, errKey := s.readAccess(r, d, d.Upstream())
+	login, withLogin, snmpCreds, withSNMP, version := acc.Login, acc.WithLogin, acc.SNMP, acc.WithSNMP, acc.SNMPVersion
 	if withSNMP {
 		d.SNMPVersion = version
-		if !validSNMP(d, version, snmpCreds) {
-			s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "snmp_invalid")
-			return
-		}
 	}
-	if (withLogin || withSNMP) && !s.confirmPassword(r) {
-		s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, "wrong_password")
+	if errKey != "" {
+		s.deviceForm(w, r, http.StatusUnprocessableEntity, d, true, errKey)
 		return
 	}
 	if err := s.DB.CreateDevice(r.Context(), d); err != nil {
@@ -166,6 +156,39 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request) {
 	s.UpdateFrameSources(r.Context())
 	s.deviceChanged(d.ID)
 	redirect(w, r, "/admin/devices?ok=saved")
+}
+
+// deviceAccess is the switch login and SNMP access entered in the new-device
+// forms (single and bulk).
+type deviceAccess struct {
+	Login       devices.Credentials
+	WithLogin   bool // a complete login was given and applies (upstream devices)
+	SNMP        snmp.Credentials
+	WithSNMP    bool
+	SNMPVersion string
+}
+
+// readAccess reads and validates the login and SNMP fields. upstream says
+// whether a login applies at all (otherwise it is ignored). The SNMP
+// credentials are validated against d (its address and version fallback).
+// The admin's password is checked too when anything is to be stored. The
+// returned key is a device.err.<key> message, empty when everything is fine.
+func (s *Server) readAccess(r *http.Request, d *store.Device, upstream bool) (deviceAccess, string) {
+	var a deviceAccess
+	a.Login = devices.Credentials{Username: strings.TrimSpace(r.PostFormValue("login_username")),
+		Password: r.PostFormValue("login_password")}
+	a.WithLogin = upstream && (a.Login.Username != "" || a.Login.Password != "")
+	if a.WithLogin && (a.Login.Username == "" || a.Login.Password == "") {
+		return a, "login_missing"
+	}
+	a.SNMPVersion, a.SNMP, a.WithSNMP = readSNMP(r, d.SNMPVersion)
+	if a.WithSNMP && !validSNMP(d, a.SNMPVersion, a.SNMP) {
+		return a, "snmp_invalid"
+	}
+	if (a.WithLogin || a.WithSNMP) && !s.confirmPassword(r) {
+		return a, "wrong_password"
+	}
+	return a, ""
 }
 
 func (s *Server) loadDevice(w http.ResponseWriter, r *http.Request) (*store.Device, bool) {

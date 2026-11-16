@@ -27,7 +27,7 @@ _Last updated: 2026-11-16_
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721, CRS310 with RouterOS; stacks pending) |
 | 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.16, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.16, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
 
 **Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
 ERS (verified against the mock and on the VSPs), and
@@ -159,6 +159,9 @@ Chromium against the simulator. Nothing in phase 7 has touched real hardware yet
   devices' origins.
 - **2.5 Import, export and CLI.** JSON/CSV import and export in the UI, `ers-proxy device
   add|list|import|export`.
+- **2.6 Bulk add.** Admin page `/admin/devices/bulk`: shared settings (kind, group, monitoring,
+  web login, SNMP access) plus a table of name/address rows, with paste from a spreadsheet;
+  all devices are created in one transaction or none. *Done.*
 
 ## Phase 3 – EDM proxy
 
