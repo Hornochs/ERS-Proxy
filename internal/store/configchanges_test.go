@@ -84,9 +84,13 @@ func TestConfigChanges(t *testing.T) {
 		t.Fatalf("create: %d %v", id, err)
 	}
 	c2 := &ConfigChange{DeviceID: d1.ID, State: ChangeConfirmed}
-	db.CreateConfigChange(ctx, c2)
+	if _, err := db.CreateConfigChange(ctx, c2); err != nil {
+		t.Fatal(err)
+	}
 	c3 := &ConfigChange{DeviceID: d2.ID, State: ChangePending, Deadline: dl}
-	db.CreateConfigChange(ctx, c3)
+	if _, err := db.CreateConfigChange(ctx, c3); err != nil {
+		t.Fatal(err)
+	}
 	if c2.CreatedAt.IsZero() {
 		t.Fatal("CreatedAt not defaulted")
 	}

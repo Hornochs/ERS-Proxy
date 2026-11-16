@@ -277,7 +277,9 @@ func TestConfigureFlow(t *testing.T) {
 	}
 
 	// Second change, reverted.
-	r = h.postForm(base+"/configure/preview", portForm())
+	if r = h.postForm(base+"/configure/preview", portForm()); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("second preview: %d", r.StatusCode)
+	}
 	pv = f.previews["pv2"]
 	h.postForm(base+"/configure/apply", url.Values{"preview": {"pv2"}, "hash": {pv.Hash}})
 	open, _ = h.db.OpenConfigChangeForDevice(ctx, id)
