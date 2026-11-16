@@ -64,10 +64,10 @@ type expiring struct {
 }
 
 func (e *expiring) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.URL.Path == "/logout.html":
+	switch r.URL.Path {
+	case "/logout.html":
 		e.logouts++
-	case r.URL.Path == "/jsp/getFormMibs.jsp":
+	case "/jsp/getFormMibs.jsp":
 		e.posts++
 		if e.always || e.posts == 1 {
 			_, _ = w.Write([]byte(`<form name="submitForm">`))

@@ -89,7 +89,7 @@ reproducible (`-trimpath`, commit timestamps).
 
 ## Conventions
 
-- Go 1.24; no dependency that requires a newer toolchain.
+- Go 1.26; no dependency that requires a newer toolchain.
 - Logging with `log/slog`; wrap errors with context (`fmt.Errorf("…: %w", err)`).
 - Timestamps in the database as Unix seconds (UTC).
 - UI texts only via keys in `internal/web/i18n.go` (English and German).
