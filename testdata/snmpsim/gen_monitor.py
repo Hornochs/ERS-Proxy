@@ -6,8 +6,9 @@
 writes generic.snmprec (a Q-BRIDGE switch), ers5600.snmprec (an ERS 5600
 two-unit stack with RAPID-CITY VLANs and no Q-BRIDGE), cisco.snmprec (VTP) and
 tplink.snmprec (Q-BRIDGE), voss.snmprec (VSP 4850GTS on VOSS 7.1) and
-swos.snmprec (MikroTik CRS305 on SwOS 2.18) and
-grandstream.snmprec (Grandstream GWN7721). All values are made up;
+swos.snmprec (MikroTik CRS305 on SwOS 2.18),
+grandstream.snmprec (Grandstream GWN7721) and
+routeros.snmprec (MikroTik CRS310 on RouterOS 7.25). All values are made up;
 only the OIDs are real. The community of each agent is its file name.
 """
 import os
@@ -369,6 +370,38 @@ def grandstream():
     a.write("grandstream.snmprec")
 
 
+def routeros():
+    """MikroTik CRS310-8G+2S+ on RouterOS 7.25 as seen on real hardware:
+    sysObjectID .14988.1, sysDescr "RouterOS <board> <version>", ifIndex =
+    interface ID (lo = 1, then the ethernet ports in front-panel order, then
+    the bridge), IF-MIB with 64-bit counters, BRIDGE-MIB, LLDP-MIB, from
+    Q-BRIDGE only dot1qPvid, MikroTik serial and firmware scalars. No VLAN
+    table, EtherLike or IEEE8023-LAG."""
+    a = Agent()
+    system(a, "RouterOS CRS310-8G+2S+ 7.25.1", "1.3.6.1.4.1.14988.1", "ros-lab")
+    a.s("1.3.6.1.4.1.14988.1.1.7.3.0", "SYNTH0003")
+    a.s("1.3.6.1.4.1.14988.1.1.7.4.0", "7.25.1")
+    interface(a, 1, "lo", "lo", 24, True, 0)
+    # (ifIndex, name, link up, Mbit/s, PVID)
+    ports = [(2, "ether1", True, 1000, 1337), (3, "ether2", True, 2500, 1337), (4, "ether3", False, 0, 1337),
+             (5, "ether4", False, 0, 1), (6, "ether5", True, 1000, 1), (7, "ether6", False, 0, 1),
+             (8, "ether7", False, 0, 1), (9, "ether8", False, 0, 1),
+             (10, "sfp-sfpplus1", True, 10000, 1337), (11, "sfp-sfpplus2", True, 10000, 1)]
+    for idx, name, up, mbps, pvid in ports:
+        interface(a, idx, name, name, 6, up, mbps, in_octets=idx * 1000000, out_octets=idx * 2500000)
+        a.i(f"1.3.6.1.2.1.17.1.4.1.2.{idx - 1}", idx)  # bridge port n -> ifIndex
+        a.i(f"1.3.6.1.2.1.17.7.1.4.5.1.1.{idx - 1}", pvid, 66)
+        a.i(f"1.0.8802.1.1.2.1.3.7.1.2.{idx}", 5)
+        a.s(f"1.0.8802.1.1.2.1.3.7.1.3.{idx}", name)
+    interface(a, 12, "bridge", "bridge", 209, True, 0)
+    # LLDP neighbour (a bridge) on sfp-sfpplus2
+    a.s("1.0.8802.1.1.2.1.4.1.1.7.0.11.1", "1/49")
+    a.s("1.0.8802.1.1.2.1.4.1.1.8.0.11.1", "uplink")
+    a.s("1.0.8802.1.1.2.1.4.1.1.9.0.11.1", "core-sw")
+    a.x("1.0.8802.1.1.2.1.4.1.1.12.0.11.1", [0x28, 0x00])
+    a.write("routeros.snmprec")
+
+
 def demo(source, target):
     """A copy of an agent with growing counters (snmpsim "numeric" variation),
     for demonstrations: traffic between about 1 and 80 Mbit/s per port."""
@@ -397,5 +430,6 @@ if __name__ == "__main__":
     voss()
     swos()
     grandstream()
+    routeros()
     demo("ers5600.snmprec", "demo-ers5600.snmprec")
     demo("generic.snmprec", "demo-generic.snmprec")

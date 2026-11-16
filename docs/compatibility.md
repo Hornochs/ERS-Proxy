@@ -93,6 +93,29 @@ on a GWN7721, firmware 1.0.7.128):
   port-based mode (the web interface then shows no 802.1Q VLANs; the switch page says so).
 - Configuration changes (phase 8) are not supported for GWN.
 
+## MikroTik devices with RouterOS (kind `routeros`)
+
+| Model | RouterOS | Transport | Status | Verified how |
+|---|---|---|---|---|
+| CRS310-8G+2S+ | 7.25.1 | HTTPS (self-signed) | works (monitoring, read-only) | Hardware test 2026-11-16, read-only: SNMP (`routeros` driver) and the `routeros` data source (REST API): ports, speed, duplex, VLAN membership (VLAN 1337 untagged on ether1–8 and sfp-sfpplus1, tagged on sfp-sfpplus2), PVID, LLDP neighbour and traffic matched the device; SNMP and REST give the same `ifIndex`; certificate pinned through the edit page; device form, dashboard and switch page in Chromium |
+| other RouterOS 7 devices (CRS3xx/5xx, routers) | 7.x | HTTPS or HTTP | expected to work | Same REST API; PoE is not read; on devices whose ethernet ports are not numbered in front-panel order the front-panel numbers can differ |
+| RouterOS 6 | 6.x | – | SNMP only | No REST API: use the source `snmp` (no VLAN table, duplex or bonds) |
+
+The kind `routeros` opens WebFig directly in a tab (WebFig sends `X-Frame-Options: sameorigin`,
+so it cannot be embedded; its login is encrypted JavaScript, so there is no auto-login). The
+server only talks to the device for the data source. Facts seen on the CRS310:
+
+- **SNMP agent:** system group (`sysObjectID` `1.3.6.1.4.1.14988.1`, `sysDescr` "RouterOS
+  <board> <version>"), IF-MIB with 64-bit counters, BRIDGE-MIB, LLDP-MIB, from Q-BRIDGE only
+  `dot1qPvid`; no VLAN table, EtherLike or IEEE8023-LAG. `ifIndex` is the interface ID: `lo` = 1,
+  then the ethernet ports, then bridges and VLAN interfaces.
+- **REST API:** every value is a string; `vlan-ids` can hold lists and ranges; `current-tagged`
+  and `current-untagged` list only active ports, so the data source merges them with the
+  configured members. Speed and duplex are only in `/interface/ethernet/monitor`. A wrong login
+  is answered with `401`.
+- **Not verified on hardware:** bonds, PoE models, several bridges, RouterOS before 7.25.
+- Configuration changes (phase 8) are not supported for RouterOS.
+
 Other ERS families with the same EDM (Ext JS 2.2) – for example ERS 3500, 4000/4800, 5500 and
 5900 – are expected to need the same patches. Patches match file content, not paths or
 versions, so they apply wherever the affected code appears. Please report results with the
@@ -112,6 +135,7 @@ fallback). All drivers are read-only.
 | `tplink` | `1.3.6.1.4.1.11863.` | standard MIBs plus TPLINK-DOT1Q-VLAN-MIB (port table: PVID, LAG; VLAN table: names, tagged/untagged port lists as text); front-panel ports from `ifName`; Q-BRIDGE fallback | T1500G-8T and Omada SG2210P (firmware 5.20): ports, PVID, tagging, LAG, LLDP; PoE (status, class, power per port, budget) from TPLINK-POWER-OVER-ETHERNET-MIB, POWER-ETHERNET-MIB as fallback. The SNMP agents are slow and drop requests: a poll takes 30–60 s |
 
 | `swos` | `1.3.6.1.4.1.14988.2` (MikroTik SwOS) or `sysDescr` containing `SwOS` | SNMP: IF-MIB and MIKROTIK-MIB serial/firmware; front-panel number = ifIndex. With the `swos` data source also VLANs, PVID, derived tagging, duplex and LAGs ("Trunk1"…) from SwOS's web API, served as Q-BRIDGE, EtherLike and IEEE8023-LAG objects | CRS305-1G-4S+ (SwOS 2.18) over SNMP and the SwOS data source: ports, speed, duplex, VLANs, PVID, traffic. LAG membership and the tagging of hybrid ports not yet seen on hardware |
+| `routeros` | `1.3.6.1.4.1.14988.1` (MikroTik RouterOS) or `sysDescr` starting with `RouterOS` (score 90) | SNMP: IF-MIB (64-bit counters), BRIDGE-MIB, LLDP, `dot1qPvid`, `mtxrSerialNumber`; front-panel number = position among the ethernet ports; model and RouterOS version from `sysDescr`. With the `routeros` data source also VLANs, names, tagging, duplex and bonds from the REST API | CRS310-8G+2S+ (RouterOS 7.25.1) over SNMP and the `routeros` data source: ports, speed, duplex, VLANs, PVID, tagging, LLDP, traffic. Bonds not yet seen on hardware |
 | `grandstream` | `1.3.6.1.4.1.42397` (bare enterprise OID, also prefix `1.3.6.1.4.1.42397.`) or `sysDescr` starting with `GWN` (score 90) | SNMP: IF-MIB (64-bit counters), `dot1qPvid`; front-panel number from `ifName` (`2.5GE1`, `SFP+10`: type prefix + number), unit 1; model and firmware from Grandstream scalars `1.3.6.1.4.1.42397.1.3.1.1`/`.1.3.1.4` (no public MIB); LAGs named `LAG<n>`. With the `gwn` data source also VLANs (egress/untagged bitmaps), names, duplex, LLDP neighbours, LAGs and the serial number from the switch's web API | GWN7721 (1.0.7.128) over SNMP and the `gwn` data source: ports, speed, VLANs, PVID, tagging, LLDP, rates. LAGs, PoE models and larger models not yet seen on hardware |
 
 Please attach `ers-proxy snmp-capture` output to a device report to get a driver verified.

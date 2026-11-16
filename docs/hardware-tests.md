@@ -208,6 +208,27 @@ at the end of this file).
 | C.9 | Change the switch in EDM between preview and apply | "the switch changed since the preview", nothing written |
 | C.10 | Invalid value (e.g. an alias the switch rejects) | apply fails, already written steps reverted, state `failed` |
 
+## 10. MikroTik RouterOS (step 7.16, read-only)
+
+Needs RouterOS 7 with the service `www-ssl` (or `www`) enabled, an account in a group with
+`read`, `api` and `rest-api` policies (no `write`), and a read-only SNMP community.
+
+1. Add the device as kind *MikroTik RouterOS* with the `https://` address and the web login;
+   confirm the certificate from the edit page (self-signed certificates are pinned).
+2. ```bash
+   ers-proxy -c <config> snmp-test <device-id> --collect
+   ers-proxy -c <config> snmp-capture <device-id> --out routeros-real.snmprec
+   ```
+   *Expect:* driver `routeros` (`sysObjectID` `1.3.6.1.4.1.14988.1`); ports numbered by their
+   position among the ethernet ports; model and version from `sysDescr`; a note that VLANs need
+   the REST source.
+3. Switch the monitoring source to *RouterOS (REST API)*. *Expect:* the same ports, speed and
+   rates as over SNMP, plus VLANs with names, tagging, PVID, duplex, bonds and LLDP neighbours as
+   shown in WebFig (*Bridge › VLANs*, *Interfaces*, *IP › Neighbors*).
+4. A wrong password stops the data source with a login error after one attempt (check the
+   device's log in RouterOS: one failed login, not one per poll).
+5. Open WebFig from the sidebar (*Expect* in 7.16: a new browser tab).
+
 ## After the tests
 
 - Update [compatibility.md](compatibility.md): model, firmware, transport, result, how verified.
@@ -261,3 +282,5 @@ at the end of this file).
 | C.9 (EDM) | Switch changed between preview and apply | ok | refused with "the switch changed since the preview"; nothing written |
 | C.10 (EDM) | Invalid value | ok | create VLAN 4090 (reserved on VOSS): the switch rejected it (`snmpErrorStatus` 12801), state `failed`, nothing left on the switch |
 | C.x | Open: SNMP channel (needs write credentials), VOSS 7.1 (VSP 4850GTS), ERS (not supported by the planner yet) | – | finding during the run: a hybrid port showed as trunk on the dashboard until the VOSS driver read `rcVlanPortUntagDefaultVlan` (fixed) |
+| R.1 | MikroTik CRS310-8G+2S+ (RouterOS 7.25.1): SNMP dashboard data | ok | 2026-11-16, read-only: driver `routeros`, ten ethernet ports in front-panel order, speed, PVID, LLDP neighbour and traffic match WebFig; no VLAN table, EtherLike or IEEE8023-LAG over SNMP |
+| R.2 | RouterOS: REST data source | ok | same ports and `ifIndex` as SNMP, plus VLAN membership (VLAN 1337 untagged on ether1–8 and sfp-sfpplus1, tagged on sfp-sfpplus2), PVID and duplex; self-signed certificate pinned through the edit page. Bonds, PoE and several bridges not configured on the test device |

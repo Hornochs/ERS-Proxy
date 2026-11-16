@@ -1,5 +1,5 @@
 // Package poller runs one loop per monitored device: open a reader (SNMP,
-// EDM, SwOS or GWN), let the driver collect a snapshot, compute rates and events against
+// EDM, SwOS, GWN or RouterOS), let the driver collect a snapshot, compute rates and events against
 // the previous snapshot, and hand everything to the history sink.
 package poller
 
@@ -60,6 +60,8 @@ type Poller struct {
 	OpenSwOS OpenFunc
 	// OpenGWN opens the Grandstream GWN web reader for source "gwn" (nil: not available).
 	OpenGWN OpenFunc
+	// OpenRouterOS opens the RouterOS REST reader for source "routeros" (nil: not available).
+	OpenRouterOS OpenFunc
 	// Timeout of one poll (SNMP requests are retried inside).
 	Timeout time.Duration
 
@@ -343,6 +345,11 @@ func (p *Poller) open(ctx context.Context, d *store.Device) (monitor.Reader, fun
 			return nil, nil, errors.New("the GWN data source is not available")
 		}
 		return p.OpenGWN(ctx, d)
+	case store.MonitorRouterOS:
+		if p.OpenRouterOS == nil {
+			return nil, nil, errors.New("the RouterOS data source is not available")
+		}
+		return p.OpenRouterOS(ctx, d)
 	}
 	return nil, nil, fmt.Errorf("unknown source %q", d.MonitorSource)
 }

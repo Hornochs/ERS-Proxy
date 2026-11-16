@@ -484,3 +484,34 @@ func TestSNMPWriteCredentialsBound(t *testing.T) {
 		t.Fatal("encrypted for an unsaved device")
 	}
 }
+
+func TestNormalizeRouterOS(t *testing.T) {
+	d := &store.Device{Name: "crs", Kind: store.KindRouterOS, URL: "HTTPS://192.0.2.40/", MonitorSource: store.MonitorRouterOS,
+		MonitorDriver: store.DriverRouterOS, Isolation: store.IsolationOff, AutoLogin: true}
+	if err := Normalize(d); err != nil || d.URL != "https://192.0.2.40" {
+		t.Fatalf("routeros: %v %q", err, d.URL)
+	}
+	if d.Isolation != store.IsolationSandbox || d.AutoLogin {
+		t.Errorf("isolation %q auto-login %v", d.Isolation, d.AutoLogin)
+	}
+	if d.Proxied() || !d.Upstream() || !d.Direct() || !d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() || d.GWN() {
+		t.Fatal("kind helpers for routeros")
+	}
+	var fe *FieldError
+	for _, kind := range []string{store.KindERS, store.KindSwOS, store.KindGWN, store.KindEDMDirect, store.KindLink} {
+		x := &store.Device{Name: "x", Kind: kind, URL: "http://192.0.2.41/", MonitorSource: store.MonitorRouterOS}
+		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
+			t.Errorf("routeros source on %s: %v", kind, err)
+		}
+	}
+	for _, src := range []string{store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN} {
+		x := &store.Device{Name: "x", Kind: store.KindRouterOS, URL: "192.0.2.40", MonitorSource: src}
+		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
+			t.Errorf("%s source on routeros: %v", src, err)
+		}
+	}
+	x := &store.Device{Name: "x", Kind: store.KindRouterOS, URL: "192.0.2.40", MonitorSource: store.MonitorSNMP}
+	if err := Normalize(x); err != nil {
+		t.Errorf("snmp source on routeros: %v", err)
+	}
+}

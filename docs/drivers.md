@@ -15,7 +15,8 @@ poller ──> Driver.Collect(ctx, Reader) ──> *monitor.Snapshot ──> Rat
               ├── snmpsrc  (SNMP GET/walk; names -> OIDs via monitor.Objects)
               ├── edmsrc   (EDM getFormMibs/getTableMibs; ERS and VSP, experimental)
               ├── swossrc  (MikroTik SwOS web API, served under standard object names)
-              └── gwnsrc   (Grandstream GWN web API plus SNMP, served under standard object names)
+              ├── gwnsrc   (Grandstream GWN web API plus SNMP, served under standard object names)
+              └── routerossrc (MikroTik RouterOS REST API, served under standard object names)
 ```
 
 - **Reader** (`internal/monitor/monitor.go`) reads objects by MIB name:
@@ -39,7 +40,7 @@ poller ──> Driver.Collect(ctx, Reader) ──> *monitor.Snapshot ──> Rat
   - `SkipPoE` leaves POWER-ETHERNET-MIB out; a driver with a vendor PoE table calls
     `Base.ReadPoE` only when that table is missing (`tplink` does this).
 - **`Driver`** interface:
-  - `Name()`: the identifier stored with a device (`generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`, `grandstream`).
+  - `Name()`: the identifier stored with a device (`generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`, `grandstream`, `routeros`).
   - `Match(System) int`: how well the driver fits. `0` not at all, `10` generic fallback, `90`
     probably (for example by `sysDescr`), `100` made for this vendor (by `sysObjectID` prefix).
   - `Collect(ctx, Reader) (*Snapshot, error)`.
@@ -100,7 +101,7 @@ VLANs on the wrong ports.
    }
    ```
    Look at `generic.go` (Q-BRIDGE), `tplink.go` (vendor table with text port lists), `cisco.go` (vendor VLAN tables
-   with Q-BRIDGE fallback) `ers.go` (own numbering, PortSet bitmaps, stack units), `voss.go` (slot/port from `ifName`, reuses the ERS RAPID-CITY helpers) `swos.go` (standard MIBs only; VLANs come from a reader that translates a web API, see below) and `grandstream.go` (port numbers from `ifName`, model/firmware from vendor scalars; VLANs, duplex and LLDP from `gwnsrc`). A failing
+   with Q-BRIDGE fallback) `ers.go` (own numbering, PortSet bitmaps, stack units), `voss.go` (slot/port from `ifName`, reuses the ERS RAPID-CITY helpers) `swos.go` (standard MIBs only; VLANs come from a reader that translates a web API, see below) and `grandstream.go` (port numbers from `ifName`, model/firmware from vendor scalars; VLANs, duplex and LLDP from `gwnsrc`) and `routeros.go` (front-panel number = position among the ethernet ports; VLANs, duplex and bonds from `routerossrc`). A failing
    optional read should add a note and keep going; only a missing system group or interface
    table is an error.
 4. **Register** it in `drivers.All()` (`generic.go`). Give `Match` a score of 100 for the
@@ -161,6 +162,18 @@ no traffic rates. A failing SNMP read does not fail the poll: it becomes a note
 allows one web session per account, so the client logs in, reads and logs out within each poll
 (`gwn.ErrBusy` is retried next poll, `gwn.ErrLogin` not until the login changes). Tests use the
 fake switch `internal/gwn/gwntest`.
+
+`routerossrc` serves the REST API of MikroTik RouterOS 7 (`internal/routeros`: GET of
+allow-listed menus plus the read-only command `/interface/ethernet/monitor` with `once`; HTTP
+Basic authentication on every request, no session). `ifIndex` is the number of RouterOS's
+interface ID (`.id` `*B` = 11), which RouterOS's SNMP agent also uses as `ifIndex`. The reader
+serves the system group (`sysDescr` = "RouterOS <board> <version>" as over SNMP),
+`mtxrSerialNumber`/`mtxrFirmwareVersion`, IF-MIB with 64-bit counters, `dot3StatsDuplexStatus`,
+`dot1dBasePortIfIndex` (bridge port = `ifIndex`), `dot3adAggPortAttachedAggID` (the bond's
+`ifIndex`), Q-BRIDGE (from the bridge VLAN table of bridges with VLAN filtering; the bridge
+itself is left out of the port lists, bond members are added to the bond's lists) and LLDP
+(`lldpRemSysName`, `lldpRemPortId` from `/ip/neighbor`). Tests use the fake device
+`internal/routeros/routerostest`.
 
 ## Rules
 

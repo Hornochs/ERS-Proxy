@@ -482,6 +482,38 @@ func TestSwOSMatch(t *testing.T) {
 	}
 }
 
+func TestRouterOSAgainstSimulator(t *testing.T) {
+	s, d := collect(t, "routeros")
+	if d.Name() != "routeros" {
+		t.Fatalf("detected %s", d.Name())
+	}
+	if len(s.Units) != 1 || s.Units[0].Model != "CRS310-8G+2S+" || s.Units[0].Serial != "SYNTH0003" || s.Units[0].Firmware != "7.25.1" {
+		t.Fatalf("units %+v", s.Units)
+	}
+	phys := 0
+	for _, p := range s.Ports {
+		if p.Physical {
+			phys++
+		}
+	}
+	if phys != 10 {
+		t.Errorf("%d physical ports, want 10 (lo and bridge are not physical)", phys)
+	}
+	if p := port(t, s, 2); p.Unit != 1 || p.Number != 1 || p.Name != "ether1" || !p.Up() || !p.HasHC || p.PVID != 1337 {
+		t.Errorf("ether1: %+v", p)
+	}
+	p := port(t, s, 11)
+	if p.Number != 10 || p.Name != "sfp-sfpplus2" || p.Speed != 10_000_000_000 || p.PVID != 1 {
+		t.Errorf("sfp-sfpplus2: %+v", p)
+	}
+	if p.Neighbor == nil || p.Neighbor.SysName != "core-sw" || !p.Neighbor.Bridge {
+		t.Errorf("sfp-sfpplus2 neighbour: %+v", p.Neighbor)
+	}
+	if !strings.Contains(strings.Join(s.Notes, " "), "RouterOS (REST API)") {
+		t.Errorf("notes %v, want the hint to the REST data source", s.Notes)
+	}
+}
+
 func TestGrandstreamAgainstSimulator(t *testing.T) {
 	s, d := collect(t, "grandstream")
 	if d.Name() != "grandstream" {

@@ -12,7 +12,7 @@ import (
 
 // All returns every driver, for monitor.NewRegistry.
 func All() []monitor.Driver {
-	return []monitor.Driver{Generic{}, ERS{}, Cisco{}, TPLink{}, VOSS{}, SwOS{}, Grandstream{}}
+	return []monitor.Driver{Generic{}, ERS{}, Cisco{}, TPLink{}, VOSS{}, SwOS{}, Grandstream{}, RouterOS{}}
 }
 
 // Generic covers switches with the standard Q-BRIDGE-MIB.
