@@ -17,6 +17,9 @@ Avaya/Extreme ERS switches work in today's browsers.**
   web interfaces open on the right in tabs, in a new browser tab or in a popup window; each
   user and each device can choose. Devices can be added one by one, several at once (paste a
   list from a spreadsheet) or imported from JSON/CSV.
+- **SSH console (optional).** Admins can open an SSH terminal for a device right in the
+  workspace – also on old Avaya ERS switches that only speak `ssh-dss` and SHA-1. Off unless
+  enabled in `config.yaml`.
 - **Safe by design.** Switch content runs in a browser sandbox and cannot reach the portal or
   other switches; switch cookies never reach the browser; stored switch passwords are
   encrypted; HTTPS to the switch works with the old TLS versions these devices speak, with

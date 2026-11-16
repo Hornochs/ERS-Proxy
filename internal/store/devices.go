@@ -134,9 +134,24 @@ type Device struct {
 	ConfigSource string
 	// SNMPWriteCredentials is the encrypted SNMP write community or v3 login (nil = none stored).
 	SNMPWriteCredentials []byte
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	// SSHEnabled offers the SSH console for the device (with ssh.enabled).
+	SSHEnabled bool
+	SSHPort    int
+	// SSHLogin is where the console's login comes from: "" (by kind), web
+	// (the stored web login), own (SSHCredentials) or ask (typed each time).
+	SSHLogin string
+	// SSHProfile is auto, modern or legacy (algorithms; legacy for ERS only).
+	SSHProfile string
+	// SSHCredentials is the encrypted SSH login (nil = none stored).
+	SSHCredentials []byte
+	// SSHHostKey is the pinned SHA-256 fingerprint of the SSH host key.
+	SSHHostKey string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
+
+// HasSSHCredentials reports whether an SSH login of its own is stored.
+func (d *Device) HasSSHCredentials() bool { return len(d.SSHCredentials) > 0 }
 
 // HasSNMPWriteCredentials reports whether SNMP write credentials are stored.
 func (d *Device) HasSNMPWriteCredentials() bool { return len(d.SNMPWriteCredentials) > 0 }
@@ -202,7 +217,8 @@ func (d *Device) SwOS() bool { return d.Kind == KindSwOS }
 const deviceCols = `d.id, COALESCE(d.group_id, 0), COALESCE(g.name, ''), d.name, d.kind, d.url, d.open_mode, d.isolation,
 	d.tls_mode, d.tls_pin, d.tls_profile, d.credentials, d.auto_login, d.health_enabled, d.notes, d.sort,
 	d.monitor_source, d.monitor_driver, d.monitor_interval, d.snmp_version, d.snmp_port, d.snmp_credentials,
-	d.config_source, d.snmp_write_credentials, d.created_at, d.updated_at`
+	d.config_source, d.snmp_write_credentials, d.ssh_enabled, d.ssh_port, d.ssh_login, d.ssh_profile,
+	d.ssh_credentials, d.ssh_hostkey, d.created_at, d.updated_at`
 
 const deviceFrom = ` FROM devices d LEFT JOIN device_groups g ON g.id = d.group_id`
 
@@ -212,7 +228,8 @@ func scanDevice(row interface{ Scan(...any) error }) (*Device, error) {
 	err := row.Scan(&d.ID, &d.GroupID, &d.GroupName, &d.Name, &d.Kind, &d.URL, &d.OpenMode, &d.Isolation,
 		&d.TLSMode, &d.TLSPin, &d.TLSProfile, &d.Credentials, &d.AutoLogin, &d.HealthEnabled, &d.Notes, &d.Sort,
 		&d.MonitorSource, &d.MonitorDriver, &d.MonitorInterval, &d.SNMPVersion, &d.SNMPPort, &d.SNMPCredentials,
-		&d.ConfigSource, &d.SNMPWriteCredentials, &created, &updated)
+		&d.ConfigSource, &d.SNMPWriteCredentials, &d.SSHEnabled, &d.SSHPort, &d.SSHLogin, &d.SSHProfile,
+		&d.SSHCredentials, &d.SSHHostKey, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -320,6 +337,38 @@ func (db *DB) SetDeviceCredentials(ctx context.Context, id int64, enc []byte) er
 		auto_login = CASE WHEN kind IN (?, ?) THEN ? ELSE 0 END, updated_at = ? WHERE id = ?`,
 		enc, KindERS, KindVSP, boolInt(enc != nil), unix(Now()), id)
 	return err
+}
+
+// SetDeviceSSH stores the SSH console settings of a device.
+func (db *DB) SetDeviceSSH(ctx context.Context, id int64, enabled bool, port int, login, profile string) error {
+	res, err := db.sql.ExecContext(ctx, `UPDATE devices SET ssh_enabled = ?, ssh_port = ?, ssh_login = ?, ssh_profile = ?,
+		updated_at = ? WHERE id = ?`, boolInt(enabled), port, login, profile, unix(Now()), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetDeviceSSHCredentials stores (or with nil removes) the encrypted SSH login.
+func (db *DB) SetDeviceSSHCredentials(ctx context.Context, id int64, enc []byte) error {
+	_, err := db.sql.ExecContext(ctx, `UPDATE devices SET ssh_credentials = ?, updated_at = ? WHERE id = ?`, enc, unix(Now()), id)
+	return err
+}
+
+// SetDeviceSSHHostKey pins (or with "" forgets) the SSH host key fingerprint.
+// With want set, the key is only stored while the pinned one still equals
+// want (compare and swap); it reports whether it was stored.
+func (db *DB) SetDeviceSSHHostKey(ctx context.Context, id int64, fingerprint, want string) (bool, error) {
+	res, err := db.sql.ExecContext(ctx, `UPDATE devices SET ssh_hostkey = ?, updated_at = ? WHERE id = ? AND ssh_hostkey = ?`,
+		fingerprint, unix(Now()), id, want)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }
 
 // SetDeviceSNMPCredentials stores (or with nil removes) the encrypted SNMP

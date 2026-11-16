@@ -81,6 +81,11 @@ var serverCmd = &cobra.Command{
 			ui.Configure = mgr
 			go mgr.Run(ctx)
 		}
+		if e.cfg.SSH.Enabled {
+			// Only config.yaml turns this on (ssh.enabled).
+			log.Warn("the SSH console is enabled (ssh.enabled): admins can open SSH sessions on devices with SSH turned on")
+			ui.SSH = web.NewSSHConsole(e.cfg.SSH)
+		}
 		go checker.Run(ctx)
 		go mon.Run(ctx)
 		go rec.Run(ctx)

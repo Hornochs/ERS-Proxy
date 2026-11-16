@@ -53,6 +53,15 @@ monitor:
 #   enabled: false
 #   confirm_timeout: 2m       # a change is reverted unless confirmed (30s to 30m)
 
+# SSH console in the browser (admins only). Off; can only be enabled here,
+# explicitly: no environment variable turns it on. Devices also need SSH
+# turned on in their settings.
+# ssh:
+#   enabled: false
+#   idle_timeout: 15m         # end a console without input or output (1m to 24h)
+#   connect_timeout: 15s      # connect, handshake and login (1s to 2m)
+#   max_sessions: 10          # consoles open at the same time, all users
+
 # Built-in TLS (otherwise use a reverse proxy):
 # tls:
 #   cert_file: /etc/ers-proxy/tls.crt

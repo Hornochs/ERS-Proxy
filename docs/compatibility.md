@@ -129,6 +129,18 @@ Other ERS families with the same EDM (Ext JS 2.2) – for example ERS 3500, 4000
 versions, so they apply wherever the affected code appears. Please report results with the
 "Device report" issue template.
 
+## SSH console
+
+| Device | SSH server offers | Profile | Status |
+|---|---|---|---|
+| Avaya ERS 5600 (as reported by the maintainer for an ERS 5632FD, 6.6.3.015) | key exchange only `diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1`; host key `ssh-dss` | `legacy` (`auto` falls back) | verified against a fake device with exactly these algorithms (Chromium, 2026-11-16); hardware test pending |
+| Very old ERS firmware | as above, MAC only `hmac-md5` | `legacy` | HMAC-MD5 tested against a fake device; no such switch at hand |
+| VSP/VOSS, RouterOS 7, others | current algorithms | `modern` | hardware test pending |
+
+The ERS CLI starts with a banner and "Enter Ctrl-Y to begin"; press Ctrl-Y in the console.
+VOSS uses separate SSH accounts (store an SSH login of its own); ERS and RouterOS accept the
+web login. If a device offers no algorithm ERS-Proxy supports, the console names both lists.
+
 ## Port dashboard drivers
 
 The port dashboard picks a driver from `sysObjectID` (highest match wins; `generic` is the

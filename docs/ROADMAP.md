@@ -26,6 +26,7 @@ _Last updated: 2026-11-16_
 | 6 – Hardware and 1.0 | in progress (6.1 partly) |
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721, CRS310 with RouterOS; stacks pending) |
 | 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
+| 9 – SSH console | in progress (9.1–9.3 done; 9.4 hardware test open) |
 
 **Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
 
@@ -303,6 +304,24 @@ the branch `switch-config`.
   section 9 in hardware-tests.md).*
 
 8.2–8.5 need no hardware; 8.1 must be done before 8.6 is finished.
+
+## Phase 9 – SSH console
+
+An SSH console in a workspace tab, for admins, off unless `ssh.enabled` is set in
+`config.yaml`. The server holds the SSH connection; the browser shows it with xterm.js over a
+WebSocket.
+
+- **9.1 SSH core.** `internal/webssh` (connect, host key pin, login, pseudo terminal, resize),
+  algorithm profiles, `internal/legacyssh` (frozen x/crypto/ssh v0.58.0 with `ssh-dss` and
+  HMAC-MD5 for old ERS switches), fake devices in `sshtest`. *Done.*
+- **9.2 Settings.** `ssh.*` in `config.yaml`, migration `00005_ssh.sql`, SSH card on the edit
+  page (enabled, port, login source, own login, algorithms, host key reset). *Done.*
+- **9.3 Console.** WebSocket bridge with Origin/CSRF check, host key confirmation, login prompt,
+  idle timeout, session limit, audit; page with xterm.js; sidebar action. *Done: browser test
+  against a fake ERS SSH server (legacy profile) in Chromium.*
+- **9.4 Hardware test.** ERS 5632FD (legacy algorithms), VSP 4850GTS and VSP 8404 (own
+  login), CRS310 (web login): login and show commands only. See section 11 of
+  [hardware-tests.md](hardware-tests.md).
 
 ## Later
 

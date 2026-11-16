@@ -43,11 +43,13 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 type deviceFormData struct {
 	// Configure is set when changing switch settings is enabled.
 	Configure bool
-	Device    *store.Device
-	Groups    []*store.Group
-	New       bool
-	ErrKey    string
-	Pending   string // fingerprint offered by a connection test, to confirm
+	// SSH is set when the SSH console is enabled (ssh.enabled).
+	SSH     bool
+	Device  *store.Device
+	Groups  []*store.Group
+	New     bool
+	ErrKey  string
+	Pending string // fingerprint offered by a connection test, to confirm
 }
 
 func (s *Server) deviceForm(w http.ResponseWriter, r *http.Request, status int, d *store.Device, isNew bool, errKey string) {
@@ -60,7 +62,7 @@ func (s *Server) deviceForm(w http.ResponseWriter, r *http.Request, status int, 
 	if isNew {
 		title = "devices.new"
 	}
-	p := s.page(r, title, "admin", deviceFormData{Configure: s.Configure != nil, Device: d, Groups: groups, New: isNew, ErrKey: errKey})
+	p := s.page(r, title, "admin", deviceFormData{Configure: s.Configure != nil, SSH: s.SSH != nil, Device: d, Groups: groups, New: isNew, ErrKey: errKey})
 	if errKey != "" {
 		p.Error = p.T("device.err." + errKey)
 	}
@@ -257,10 +259,30 @@ func (s *Server) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// The SSH login is bound to the address, the host key belongs to the
+		// old device.
+		if before.HasSSHCredentials() {
+			if err := s.DB.SetDeviceSSHCredentials(r.Context(), d.ID, nil); err != nil {
+				s.fail(w, r, err)
+				return
+			}
+		}
+		if before.SSHHostKey != "" {
+			if _, err := s.DB.SetDeviceSSHHostKey(r.Context(), d.ID, "", before.SSHHostKey); err != nil {
+				s.fail(w, r, err)
+				return
+			}
+		}
+	}
+	if d.Kind != before.Kind && sshSettingsForKind(&d) {
+		if err := s.DB.SetDeviceSSH(r.Context(), d.ID, d.SSHEnabled, d.SSHPort, d.SSHLogin, d.SSHProfile); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	details := d.Kind + " " + d.URL
 	if moved {
-		details += " (address changed, pin and login cleared)"
+		details += " (address changed, pin, logins and SSH host key cleared)"
 	}
 	// SNMP credentials are bound to host and SNMP port.
 	if (moved || before.SNMPPort != d.SNMPPort) && before.HasSNMPCredentials() {
@@ -838,4 +860,21 @@ func (s *Server) deviceSNMPWrite(w http.ResponseWriter, r *http.Request) {
 	s.Audit(r, "device.snmp_write.set", d.Name, "SNMP"+v) // never the values
 	s.deviceChanged(d.ID)
 	redirect(w, r, back+"?ok=saved")
+}
+
+// sshSettingsForKind adapts the SSH console settings of d to a new kind (the
+// legacy profile is for ERS only, SwOS has no SSH, the web login needs a
+// device the server logs in to) and reports whether it changed them.
+func sshSettingsForKind(d *store.Device) bool {
+	changed := false
+	if d.SSHEnabled && !devices.SSHSupported(d) {
+		d.SSHEnabled, changed = false, true
+	}
+	if d.SSHProfile == devices.SSHProfileLegacy && !devices.SSHLegacyAllowed(d) {
+		d.SSHProfile, changed = devices.SSHProfileAuto, true
+	}
+	if d.SSHLogin == devices.SSHLoginWeb && !d.Upstream() {
+		d.SSHLogin, changed = "", true
+	}
+	return changed
 }

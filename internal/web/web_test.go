@@ -74,6 +74,13 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWith(t, nil)
+}
+
+// newHarnessWith lets setup change the server (and its configuration) before
+// the routes are built.
+func newHarnessWith(t *testing.T, setup func(*Server)) *harness {
+	t.Helper()
 	dir := t.TempDir()
 	db, err := store.Open(store.Options{Path: filepath.Join(dir, "t.db")})
 	if err != nil {
@@ -98,6 +105,9 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	h.ui = ui
+	if setup != nil {
+		setup(ui)
+	}
 	h.srv.Config.Handler = a.SecurityHeaders(a.SessionMiddleware(ui.Routes()))
 	h.srv.Start()
 	t.Cleanup(h.srv.Close)

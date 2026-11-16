@@ -40,6 +40,20 @@ index): `rows per port = 2880 (minutes in 48 h) + 2880 (quarters in 30 days) + 8
 roughly 0.7 GB. On small systems (Raspberry Pi, small containers) lower `monitor.retention.quarter`
 and `monitor.retention.hour`, for example to `168h` and `2160h`.
 
+### SSH console
+
+```yaml
+ssh:
+  enabled: false        # only here; no environment variable turns it on
+  idle_timeout: 15m     # end a console without input or output (1m–24h)
+  connect_timeout: 15s  # connect, SSH handshake and login (1s–2m)
+  max_sessions: 10      # consoles open at the same time, all users (1–1000)
+```
+
+With `enabled: true` admins can open an SSH console (a terminal in a workspace tab) on devices
+whose SSH console is turned on in their settings. The reverse proxy must pass WebSockets (see
+[reverse-proxy.md](reverse-proxy.md)).
+
 ## Environment variables
 
 | Variable | Overrides |
@@ -74,3 +88,14 @@ The SNMP community or v3 login is set in the web UI (when adding the device, or 
 with `ers-proxy snmp-test <device-id>`, or ad hoc with
 `ERSPROXY_SNMP_COMMUNITY=… ers-proxy snmp-test --host H [--port 161]`. ERS-Proxy only reads via
 SNMP; it never sends SET requests.
+
+SSH console settings (edit page, card "SSH console"; only shown with `ssh.enabled`; not part of
+import and export):
+
+| Field | Values | Meaning |
+|---|---|---|
+| ssh_enabled | `true`, `false` | Offer the console for this device (not for `swos`). |
+| ssh_port | 1–65535 | SSH port, default 22. Changing it clears the SSH login and the pinned host key. |
+| ssh_login | empty, `web`, `own`, `ask` | Where the login comes from. Empty: by kind – `web` (the stored web login) for `ers-edm` and `routeros`, `own` (a login stored for SSH) for `vsp-edm` and `edm-direct`, `ask` (typed in the console every time) otherwise. Without a stored login the console asks. |
+| ssh_profile | `auto`, `modern`, `legacy` | SSH algorithms. `legacy` (only `ers-edm`) adds `ssh-dss`, SHA-1 key exchanges, CBC ciphers and HMAC-MD5; `auto` tries the current algorithms first and, for `ers-edm`, falls back to `legacy` when the device offers nothing else. |
+| ssh host key | SHA-256 fingerprint | Pinned when an admin confirms it in the console; "Reset SSH key" on the edit page forgets it. |

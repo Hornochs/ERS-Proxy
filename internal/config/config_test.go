@@ -138,4 +138,7 @@ func TestConfigureNotEnabledByEnv(t *testing.T) {
 	if c.Configure.Enabled {
 		t.Fatal("environment enabled configure")
 	}
+	if c.SSH.Enabled {
+		t.Fatal("environment enabled the SSH console")
+	}
 }

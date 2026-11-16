@@ -22,6 +22,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | T5 | Theft of stored switch passwords | Copy of the database, or redirecting a device to an attacker's host |
 | T6 | Man in the middle between ERS-Proxy and a switch | ARP spoofing in the management network |
 | T7 | Leaking switch sessions | Switch cookies end up in the browser or in logs |
+| T9 | **Misused SSH console** (only with `ssh.enabled`) | A stolen admin session opens a CLI on a switch; a forged page in the admin's browser drives the console; a device impersonates a switch to collect the login |
 | T8 | **Misused or mistaken configuration changes** (only with `configure.enabled`) | A stolen admin session moves an uplink into another VLAN; an admin cuts off the management VLAN by mistake; a forged request applies a change the admin never saw |
 
 ## Mitigations
@@ -180,6 +181,51 @@ is off by default. Port monitoring alone never writes to a switch.
   audit log with a readable summary, never with credentials; each switch also has a change
   history.
 
+### SSH console (T9)
+
+Off unless `ssh.enabled: true` is set in `config.yaml`; no environment variable or UI turns it
+on. Without it no console route exists (404). With it:
+
+- **Admins only.** All console routes are in the admin group; devices offer the console only
+  when SSH is turned on in their settings. Other users never see it.
+- **No forged connections.** The WebSocket upgrade is a GET, which the CSRF middleware does
+  not check, so the handler itself requires a same-origin `Origin` (no `null`, never missing)
+  and the session's CSRF token in the query, and the WebSocket library checks the origin again.
+  The console page is portal code (no switch content); it may be framed by the portal only
+  (`frame-ancestors 'self'`).
+- **Host keys are pinned (trust on first use).** The SSH client checks the device's host key
+  before it sends the login. An unknown key is shown to the admin with a one-time nonce
+  (10 minutes, bound to device and admin); only that nonce pins it. A changed key ends the
+  connection with a warning and an audit entry; it can only be reset on the device's edit page.
+- **Logins.** Stored SSH logins are AES-GCM encrypted with associated data bound to device, host
+  and SSH port (`devices.SSHAAD`); they are cleared when the address or the SSH port changes.
+  ERS and RouterOS use the stored web login by default, VOSS a login of its own. A login typed
+  in the console is used for that connection only: it is not stored on the server; the page
+  keeps it in memory (not in Web Storage) until it is closed, so that confirming a host key does
+  not ask again. After three rejected logins the console stops.
+- **Nothing is recorded.** Input and output are relayed only. The audit log notes
+  `ssh.open` (algorithms, whether the login was stored or typed), `ssh.close` (reason,
+  duration, bytes), `ssh.login_failed`, `ssh.hostkey.trust`, `ssh.hostkey.mismatch` and
+  `ssh.hostkey.clear`; never passwords or terminal content.
+- **Limits.** `ssh.max_sessions` consoles at the same time, an idle timeout
+  (`ssh.idle_timeout`), and the console ends when the portal session ends (checked every 30 s).
+  The server pings the browser every 30 s.
+- **Old ERS algorithms.** Avaya ERS switches only offer `ssh-dss` host keys and SHA-1 key
+  exchanges, the oldest firmware only `hmac-md5`. The current `golang.org/x/crypto/ssh` no
+  longer supports `ssh-dss`, so ERS-Proxy carries a frozen copy of `x/crypto/ssh` v0.58.0 with
+  HMAC-MD5 added (`internal/legacyssh`, see its README). It is used **only for devices of kind
+  `ers-edm`**: with the profile `auto` after the current implementation found no common
+  algorithm, or with the profile `legacy`. A test ensures that only the legacy dialer imports it.
+  A panic while it parses data from a device ends that connection, not the process. The copy
+  gets no automatic security fixes (govulncheck does not see it as x/crypto): check x/crypto
+  advisories for `ssh` and patch the copy when its client code is affected. The algorithms
+  themselves are weak (DSA-1024, SHA-1, CBC); the host key pin protects against a later
+  impersonation, not the first contact. Keep ERS switches in a management network.
+- **The terminal library** (xterm.js, MIT, vendored unmodified in `static/vendor/xterm/`)
+  creates `<style>` elements. The console page allows styles with a nonce that is new for every
+  response (`style-src 'self' 'nonce-…'`) and that `ssh.js` puts on those elements; no
+  `'unsafe-inline'`. Terminal output is rendered as text by xterm.js, never as HTML.
+
 ### Switch sessions (T7)
 
 - Switch cookies are kept in a per-token cookie jar on the server. They are never sent to the
@@ -197,6 +243,9 @@ is off by default. Port monitoring alone never writes to a switch.
   inside a switch's EDM; that is decided by the switch account. SwOS has only one account with
   full rights, so every portal user who can open a `swos` device can change that switch.
 - **`isolation: off`** removes the protection against T4 for that device.
+- **SSH console** (with `ssh.enabled`): an admin account gives a CLI on every device with SSH
+  turned on, with the stored logins. Old ERS switches need weak SSH algorithms, served by a
+  frozen copy of x/crypto/ssh (see T9).
 - **Configuration changes** (with `configure.enabled`): an admin account can change switches
   through ERS-Proxy, so its password protects the network. A change that cuts ERS-Proxy off
   from the switch cannot be reverted by ERS-Proxy; only a restart of the switch restores the

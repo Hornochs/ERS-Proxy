@@ -55,6 +55,9 @@ Browser ──HTTPS──> reverse proxy ──HTTP──> ers-proxy :9050
 | `internal/web` (monitoring pages) | `/dashboard` (cards, `static/dashboard.js`, `/ui/monitor.json`), `/dashboard/{id}` (switch page: faceplate, sortable port and VLAN tables, events) and `/dashboard/{id}/port/{ifindex}` (port fields, events, SVG traffic charts rendered server-side in `chart.go`; hover and sorting in `static/switch.js`). Data comes from the `MonitorView` and `HistoryView` interfaces; 404 for unknown or unmonitored devices and ports. |
 | `internal/web` (bulk add) | `handlers_bulk.go` and `device_bulk.html`: `GET/POST /admin/devices/bulk` (admin group). Shared settings are read like `readDevice`; every row (`row_name`, `row_url`, `row_kind`, `row_group`; empty rows skipped, at most 200) is normalised, checked for duplicates in the batch and against existing devices (`devices.Key`, name case-insensitive plus URL). The shared web login (only for rows the server talks to) and SNMP access go through `readAccess`, also used by `deviceCreate`; the admin's password is required when either is given. Any error re-renders the form (422) with per-row messages and creates nothing; otherwise `store.CreateDevices` inserts all devices and their encrypted credentials in one transaction. Audit: `device.create` per device, `device.credentials.set`/`device.snmp.set` (no values) and one `device.bulk_create`. Row cloning and spreadsheet paste are in `static/app.js`. |
 | `internal/web` (configuration) | `configure.go` (`Configurator`, the manager's interface) and `configure_ui.go`: routes below `/dashboard/{id}/configure/` (preview, preview page, apply, confirm, revert) and `/admin/devices/{id}/snmp-write`, registered only when `Server.Configure` is set, inside the admin group (role, CSRF, same origin). Port settings form on the port page, VLAN forms and change history on the switch page, banner (`config_banner` in `layout.html`) for pending, failed and unsaved changes; template `config_preview.html`. |
+| `internal/webssh` | Interactive SSH shells for the console: `Open` connects, checks the host key against the pin (unknown or changed key → `*HostKeyError` before the login is sent), logs in (password and keyboard-interactive), starts a shell on a pseudo terminal; `Session` (read/write, `Resize`, `Done`, `Info` with the negotiated algorithms and the banner). Profiles: `modern` (current `golang.org/x/crypto/ssh`), `legacy` (`internal/legacyssh` with its insecure algorithms; only with `Options.AllowLegacy`), `auto` (modern, then legacy on `*AlgorithmError`). `dial_legacy.go` is generated from `dial_modern.go` (`TestLegacyInSync`); `TestLegacySSHOnlyForWebSSH` keeps other packages from importing the copy. `sshtest` provides fake SSH devices (modern, ERS-like with `ssh-dss`/group14-sha1/aes128-cbc, HMAC-MD5 only, keyboard-interactive). |
+| `internal/legacyssh` | Frozen copy of `golang.org/x/crypto/ssh` v0.58.0 (the last version with `ssh-dss`), plus HMAC-MD5 and panic recovery in its read and key exchange loops; see its README. Used only by `internal/webssh` for `ers-edm` devices. Excluded from golangci-lint. |
+| `internal/web` (SSH console) | `ssh.go`: `SSHConsole` (session limit, pending host keys with nonces), routes `/ssh/{id}` (page with xterm.js and a per-response style nonce), `/ssh/{id}/ws` (WebSocket via `github.com/coder/websocket`: checks Origin and the CSRF token itself, resets the server's deadlines, JSON control messages and binary terminal data, idle timeout, portal session check and ping every 30 s), `/ssh/{id}/hostkey` (pin a shown key), `/admin/devices/{id}/ssh` and `…/ssh/hostkey/clear`; registered only when `Server.SSH` is set (`ssh.enabled`), inside the admin group. `static/ssh.js`, `templates/ssh.html`, `static/vendor/xterm/` (xterm.js 6.0.0 and addon-fit 0.11.0, unmodified). |
 | `internal/upstream` | Connection to one device: `http.Transport` with TLS profiles (`modern`, `legacy`), automatic fallback, pinning (`VerifyConnection`), tolerant status line (`fixConn`), `Probe` for confirmation and `tls-probe`. `Client.Transport` repeats reads (GET/HEAD and requests marked with `WithRetry`) up to six times (about 16 s) when the switch drops the connection quickly without an answer – its web server has only a few connection slots for all clients together. `Options.KeepAlive` (set for VOSS devices: `vsp-edm`, `edm-direct`) sends `Connection: keep-alive` instead of `close`, because VOSS resets connections it is asked to close and loses the body; connections are still not reused. `Options.Login` (set for `swos` devices with a stored login) wraps the transport in `digestTransport` (`digest.go`): it answers HTTP Digest challenges (MD5/SHA-256, `qop=auth`) and signs later requests in advance with the last nonce; a request whose signature was refused with the same nonce is not repeated (wrong login). |
 | `internal/edmproxy` | Proxy sessions (token registry, cookie jar), request/response pipeline, isolation headers, cookie shim, diagnostics per device. Serves EDM (ERS, VSP), MikroTik RouterOS's WebFig (`routeros`: the user logs in to WebFig; see below) and MikroTik SwOS (`swos`: the upstream client logs in with the stored web login; without one `/open/{id}` shows a message). |
 | `internal/edmproxy/patches` | Content-based patches for EDM, HTML script injection, and `Rebase` (absolute paths of web applications such as WebFig below `/d/{token}/`). |
@@ -86,6 +89,19 @@ Browser ──HTTPS──> reverse proxy ──HTTP──> ers-proxy :9050
    double-click (on ERS it first brings the device view's tab to the front). It repeats the
    double-click every 2 s until a dialog tab appears, because EDM draws the ports before it
    has loaded what the dialog needs (VOSS 8 ignores an early double-click).
+
+## SSH console (with `ssh.enabled`)
+
+1. The sidebar shows "›_" for devices with SSH turned on (admins only). `app.js` opens
+   `/ssh/{id}` in a workspace tab of its own (`ssh-<id>`).
+2. `ssh.js` opens the WebSocket `/ssh/{id}/ws?csrf=…` and sends `{"t":"start", cols, rows}`.
+3. The server takes the login (`devices.SSHCredentials`: stored web login, own SSH login, or
+   asks with `{"t":"login"}` and waits for `{"t":"auth"}`), then `webssh.Open` with the pinned
+   host key. Unknown key → `{"t":"hostkey", fingerprint, type, nonce}`; the page posts the
+   nonce to `/ssh/{id}/hostkey` and reconnects. Changed key → `{"t":"hostkey_changed"}`.
+4. Connected → `{"t":"connected", profile, kex, hostkey, cipher, mac}`, the banner, then
+   binary frames both ways; `{"t":"resize"}` from the page. On the end `{"t":"closed", reason}`
+   and an `ssh.close` audit entry.
 
 ## Proxy pipeline (`edmproxy.Proxy.ServeHTTP`)
 
@@ -185,6 +201,12 @@ start; in/out average and maximum, `util_max`, error deltas, `up_frac`, `n` = ra
 key `(device_id, if_index, res, ts)`, `WITHOUT ROWID`, index `(res, ts)` for pruning) and `port_events`
 (`device_id`, `if_index`, `port`, `at`, `kind`, `from_value`, `to_value`). Both cascade when a device is
 deleted. Roll-up replaces whole buckets (averages weighted by `n`), so it is idempotent.
+
+Migration `00005_ssh.sql` adds to `devices` (SSH console): `ssh_enabled`, `ssh_port` (22),
+`ssh_login` (`''` = by kind, `web`, `own`, `ask`), `ssh_profile` (`auto`, `modern`, `legacy`),
+`ssh_credentials` (AES-GCM blob, AAD `ers-proxy ssh|<id>|<host>|<ssh_port>`) and `ssh_hostkey`
+(pinned SHA-256 fingerprint). They are set through `store.SetDeviceSSH`,
+`SetDeviceSSHCredentials` and `SetDeviceSSHHostKey` (compare and swap), not by `UpdateDevice`.
 
 Migration `00004_configure.sql` adds to `devices`: `config_source` (`none`/`edm`/`snmp`, the
 channel for configuration changes) and `snmp_write_credentials` (AES-GCM blob, separate from the

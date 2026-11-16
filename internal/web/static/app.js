@@ -144,7 +144,19 @@
   var active = null;  // id
 
   function deviceLink(id) {
+    if (String(id).indexOf("ssh-") === 0) return sshLink(String(id).slice(4));
     return workspace.querySelector('.device-open[data-id="' + id + '"]');
+  }
+
+  // sshLink describes the SSH console of a device like a device link, so
+  // that it opens as a tab of its own ("ssh-<id>").
+  function sshLink(id) {
+    var a = workspace.querySelector('[data-ssh="' + id + '"]');
+    if (!a) return null;
+    return {
+      dataset: { id: "ssh-" + id, kind: "ssh", name: a.dataset.name, mode: "embedded" },
+      getAttribute: function () { return a.getAttribute("href"); }
+    };
   }
 
   function save() {
@@ -269,6 +281,11 @@
     if (a.dataset.openAs === "window") {
       e.preventDefault();
       openPopup(deviceHref(a), a.dataset.id);
+      return;
+    }
+    if (a.dataset.ssh) {
+      e.preventDefault();
+      openTab(sshLink(a.dataset.ssh));
       return;
     }
     if (!a.classList.contains("device-open")) {
