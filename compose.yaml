@@ -1,0 +1,34 @@
+# ERS-Proxy with Docker Compose - data in a named Docker volume.
+#
+# Usage:
+#   docker compose up -d                  # start
+#   docker compose exec ers-proxy ers-proxy user create admin --role admin   # first admin
+#   docker compose logs -f ers-proxy      # logs
+#   docker compose pull && docker compose up -d                              # update
+#   docker compose exec ers-proxy ers-proxy backup                           # consistent DB copy
+#     (written to /var/lib/ers-proxy/backups/ in the volume; also keep secret.key)
+#
+# The container reaches your switches through the host's normal network routing.
+# See docs/installation.md. To keep the data in a local directory instead, use
+# compose.bind.yaml.
+
+services:
+  ers-proxy:
+    # Pin a version tag (for example 1.1.0) for production.
+    image: ghcr.io/lan-dot-party/ers-proxy:latest
+    restart: unless-stopped
+    ports:
+      # Loopback only, for a reverse proxy on the same host.
+      # Use "9050:9050" to expose the port directly (no TLS).
+      - "127.0.0.1:9050:9050"
+    environment:
+      # Exactly what the browser shows. Needed for secure cookies and the Origin check.
+      ERSPROXY_PUBLIC_URL: https://ers.example.org
+      TZ: Europe/Berlin
+    volumes:
+      - ers-proxy-data:/var/lib/ers-proxy
+      # Optional: your own configuration (replaces the built-in one).
+      # - ./config.yaml:/etc/ers-proxy/config.yaml:ro
+
+volumes:
+  ers-proxy-data: {}

@@ -8,6 +8,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Docker Compose examples (`compose.yaml` with a named volume, `compose.bind.yaml` with a local
+  data directory), documented in `docs/installation.md`, and a CI workflow that starts both
+  and checks health and write access.
 - Grandstream GWN switches (verified read-only on a GWN7721, firmware 1.0.7.128): device kind
   `gwn` (the browser opens the switch's web interface directly in a tab; the stored login is
   the web login), driver `grandstream` and data source `gwn`, which reads VLANs, duplex, LLDP
