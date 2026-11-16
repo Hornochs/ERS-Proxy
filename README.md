@@ -62,8 +62,41 @@ sudo ers-proxy user create admin --role admin
 sudo systemctl enable --now ers-proxy
 ```
 
-Details, Docker and reverse proxy setup: [docs/installation.md](docs/installation.md)
-(including [Docker Compose](docs/installation.md#docker-compose)),
+### Docker Compose
+
+Two ready-made examples in the repository root, both with the multi-arch image
+`ghcr.io/lan-dot-party/ers-proxy`:
+
+| File | Persistent data | When to use |
+|---|---|---|
+| [`compose.yaml`](compose.yaml) | named Docker volume `ers-proxy-data` | simplest; Docker manages the data |
+| [`compose.bind.yaml`](compose.bind.yaml) | local directory `./data` | data visible on the host, easy to back up; the directory must belong to UID `100` / GID `101` (the container user) |
+
+Before the first start, set `ERSPROXY_PUBLIC_URL` in the file to the address users open in the
+browser. The port is published on `127.0.0.1:9050` for a reverse proxy on the same host.
+
+With a named volume:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/lan-dot-party/ERS-Proxy/main/compose.yaml
+docker compose up -d
+docker compose exec ers-proxy ers-proxy user create admin --role admin
+```
+
+With a local directory:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/lan-dot-party/ERS-Proxy/main/compose.bind.yaml
+mkdir -p data && sudo chown 100:101 data
+docker compose -f compose.bind.yaml up -d
+docker compose -f compose.bind.yaml exec ers-proxy ers-proxy user create admin --role admin
+```
+
+Update with `docker compose pull && docker compose up -d` (add `-f compose.bind.yaml` for the
+second variant). Backup, reverse proxy and details:
+[docs/installation.md](docs/installation.md#docker-compose).
+
+Details, Docker and reverse proxy setup: [docs/installation.md](docs/installation.md),
 [docs/reverse-proxy.md](docs/reverse-proxy.md), [docs/configuration.md](docs/configuration.md).
 
 ## Supported devices
