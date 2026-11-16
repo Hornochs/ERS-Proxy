@@ -22,6 +22,7 @@ const (
 const (
 	SSHProfileAuto   = "auto"
 	SSHProfileModern = "modern"
+	SSHProfileCompat = "compat"
 	SSHProfileLegacy = "legacy"
 )
 
@@ -73,13 +74,13 @@ func NormalizeSSH(d *store.Device) error {
 	switch d.SSHProfile {
 	case "":
 		d.SSHProfile = SSHProfileAuto
-	case SSHProfileAuto, SSHProfileModern:
+	case SSHProfileAuto, SSHProfileModern, SSHProfileCompat:
 	case SSHProfileLegacy:
 		if !SSHLegacyAllowed(d) {
 			return fieldErr("ssh_profile", "the legacy SSH profile is only available for ERS switches")
 		}
 	default:
-		return fieldErr("ssh_profile", "SSH profile %q: want auto, modern or legacy", d.SSHProfile)
+		return fieldErr("ssh_profile", "SSH profile %q: want auto, modern, compat or legacy", d.SSHProfile)
 	}
 	if d.SSHEnabled && !SSHSupported(d) {
 		return fieldErr("ssh_enabled", "%s devices have no SSH console", d.Kind)

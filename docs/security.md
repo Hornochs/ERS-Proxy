@@ -210,17 +210,21 @@ on. Without it no console route exists (404). With it:
 - **Limits.** `ssh.max_sessions` consoles at the same time, an idle timeout
   (`ssh.idle_timeout`), and the console ends when the portal session ends (checked every 30 s).
   The server pings the browser every 30 s.
-- **Old ERS algorithms.** Avaya ERS switches only offer `ssh-dss` host keys and SHA-1 key
-  exchanges, the oldest firmware only `hmac-md5`. The current `golang.org/x/crypto/ssh` no
-  longer supports `ssh-dss`, so ERS-Proxy carries a frozen copy of `x/crypto/ssh` v0.58.0 with
-  HMAC-MD5 added (`internal/legacyssh`, see its README). It is used **only for devices of kind
-  `ers-edm`**: with the profile `auto` after the current implementation found no common
-  algorithm, or with the profile `legacy`. A test ensures that only the legacy dialer imports it.
-  A panic while it parses data from a device ends that connection, not the process. The copy
-  gets no automatic security fixes (govulncheck does not see it as x/crypto): check x/crypto
-  advisories for `ssh` and patch the copy when its client code is affected. The algorithms
-  themselves are weak (DSA-1024, SHA-1, CBC); the host key pin protects against a later
-  impersonation, not the first contact. Keep ERS switches in a management network.
+- **Old algorithms, in two steps.** Many switches only offer weak algorithms: VSPs with VOSS
+  and the ERS 5632FD only SHA-1 key exchanges (`diffie-hellman-group14-sha1`,
+  `diffie-hellman-group1-sha1`) and `ssh-rsa` host keys signed with SHA-1. The profile
+  `compat` adds the current `golang.org/x/crypto/ssh`'s own insecure algorithms for them (SHA-1
+  key exchanges, `ssh-rsa`, CBC ciphers) – still the maintained library. Only `ssh-dss` host keys
+  and `hmac-md5`, which some older ERS firmware needs, are not in the current x/crypto at all.
+  For those ERS-Proxy carries a frozen copy of `x/crypto/ssh` v0.58.0 with HMAC-MD5 added
+  (`internal/legacyssh`, see its README), the profile `legacy`. It is used **only for devices
+  of kind `ers-edm`**, and with the profile `auto` only after `modern` and `compat` found no
+  common algorithm. A test ensures that only the legacy dialer imports it. A panic while it
+  parses data from a device ends that connection, not the process. The copy gets no automatic
+  security fixes (govulncheck does not see it as x/crypto): check x/crypto advisories for `ssh`
+  and patch the copy when its client code is affected. The algorithms of both steps are weak
+  (SHA-1, CBC, DSA-1024); the host key pin protects against a later impersonation, not the first
+  contact. Keep such switches in a management network.
 - **The terminal library** (xterm.js, MIT, vendored unmodified in `static/vendor/xterm/`)
   creates `<style>` elements. The console page allows styles with a nonce that is new for every
   response (`style-src 'self' 'nonce-…'`) and that `ssh.js` puts on those elements; no
@@ -244,8 +248,8 @@ on. Without it no console route exists (404). With it:
   full rights, so every portal user who can open a `swos` device can change that switch.
 - **`isolation: off`** removes the protection against T4 for that device.
 - **SSH console** (with `ssh.enabled`): an admin account gives a CLI on every device with SSH
-  turned on, with the stored logins. Old ERS switches need weak SSH algorithms, served by a
-  frozen copy of x/crypto/ssh (see T9).
+  turned on, with the stored logins. VSPs and ERS switches need weak SSH algorithms (`compat`);
+  the oldest ERS firmware even a frozen copy of x/crypto/ssh (`legacy`, see T9).
 - **Configuration changes** (with `configure.enabled`): an admin account can change switches
   through ERS-Proxy, so its password protects the network. A change that cuts ERS-Proxy off
   from the switch cannot be reverted by ERS-Proxy; only a restart of the switch restores the

@@ -17,6 +17,7 @@ func TestNormalizeSSH(t *testing.T) {
 	}{
 		{store.Device{Kind: store.KindERS, URL: "http://192.0.2.1", SSHEnabled: true, SSHProfile: "legacy"}, ""},
 		{store.Device{Kind: store.KindVSP, URL: "https://192.0.2.2", SSHEnabled: true, SSHProfile: "legacy"}, "ssh_profile"},
+		{store.Device{Kind: store.KindVSP, URL: "https://192.0.2.2", SSHEnabled: true, SSHProfile: "compat"}, ""},
 		{store.Device{Kind: store.KindRouterOS, URL: "https://192.0.2.3", SSHEnabled: true, SSHLogin: "web"}, ""},
 		{store.Device{Kind: store.KindLink, URL: "https://192.0.2.4/", SSHEnabled: true, SSHLogin: "web"}, "ssh_login"},
 		{store.Device{Kind: store.KindLink, URL: "https://192.0.2.4/", SSHEnabled: true, SSHLogin: "ask"}, ""},

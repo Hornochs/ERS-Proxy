@@ -112,11 +112,12 @@ func TestLegacyNeedsPermission(t *testing.T) {
 	d := sshtest.New(t, sshtest.ERS)
 	_, err := Open(context.Background(), Options{Addr: d.Addr, Username: testUser, Password: testPass, Pin: d.Fingerprint})
 	var ae *AlgorithmError
-	if !errors.As(err, &ae) || !strings.Contains(ae.What, "key exchange") ||
-		!strings.Contains(strings.Join(ae.Offered, ","), "diffie-hellman-group14-sha1") {
-		t.Fatalf("want a key exchange AlgorithmError, got %v", err)
+	// modern fails on the key exchange, compat (SHA-1 key exchange allowed)
+	// on the DSA host key, which only the frozen copy supports.
+	if !errors.As(err, &ae) || !strings.Contains(ae.What, "host key") || strings.Join(ae.Offered, ",") != "ssh-dss" {
+		t.Fatalf("want a host key AlgorithmError, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "the device offers diffie-hellman-group14-sha1") {
+	if !strings.Contains(err.Error(), "the device offers ssh-dss") {
 		t.Errorf("message %q", err)
 	}
 	_, err = Open(context.Background(), Options{Addr: d.Addr, Profile: ProfileLegacy})
@@ -209,9 +210,10 @@ func TestProfiles(t *testing.T) {
 		want    string
 		err     bool
 	}{
-		{"", false, "modern", false},
-		{"auto", true, "modern,legacy", false},
+		{"", false, "modern,compat", false},
+		{"auto", true, "modern,compat,legacy", false},
 		{"modern", true, "modern", false},
+		{"compat", false, "compat", false},
 		{"legacy", true, "legacy", false},
 		{"legacy", false, "", true},
 		{"other", true, "", true},
@@ -220,5 +222,20 @@ func TestProfiles(t *testing.T) {
 		if (err != nil) != c.err || strings.Join(got, ",") != c.want {
 			t.Errorf("Profiles(%q, %v) = %v, %v", c.profile, c.legacy, got, err)
 		}
+	}
+}
+
+// VSPs with VOSS: SHA-1 key exchange and ssh-rsa only. The current x/crypto
+// handles them with its insecure algorithms (compat), without the frozen copy.
+func TestVOSSUsesCompat(t *testing.T) {
+	d := sshtest.New(t, sshtest.VOSS)
+	s := open(t, Options{Addr: d.Addr, Pin: d.Fingerprint})
+	info := s.Info()
+	if info.Profile != ProfileCompat || info.HostKey != "ssh-rsa" || !strings.HasSuffix(info.KeyExchange, "-sha1") {
+		t.Errorf("info %+v", info)
+	}
+	if _, err := Open(context.Background(), Options{Addr: d.Addr, Username: testUser, Password: testPass,
+		Pin: d.Fingerprint, Profile: ProfileModern}); err == nil {
+		t.Error("modern profile connected to a SHA-1-only device")
 	}
 }

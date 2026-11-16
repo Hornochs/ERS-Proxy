@@ -299,7 +299,7 @@ func TestSSHLegacyOnlyForERS(t *testing.T) {
 	var out strings.Builder
 	_ = wsjson.Write(context.Background(), c, map[string]any{"t": "start", "cols": 80, "rows": 24})
 	m := next(t, c, &out)
-	if m["t"] != "error" || m["key"] != "ssh.err.algorithms" || !strings.Contains(fmt.Sprint(m["detail"]), "diffie-hellman-group14-sha1") {
+	if m["t"] != "error" || m["key"] != "ssh.err.algorithms" || !strings.Contains(fmt.Sprint(m["detail"]), "the device offers ssh-dss") {
 		t.Fatalf("want an algorithm error, got %v", m)
 	}
 	if dev.Logins.Load() != 0 {

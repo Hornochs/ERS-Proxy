@@ -312,7 +312,8 @@ An SSH console in a workspace tab, for admins, off unless `ssh.enabled` is set i
 WebSocket.
 
 - **9.1 SSH core.** `internal/webssh` (connect, host key pin, login, pseudo terminal, resize),
-  algorithm profiles, `internal/legacyssh` (frozen x/crypto/ssh v0.58.0 with `ssh-dss` and
+  algorithm profiles `modern`, `compat` (SHA-1 key exchange, `ssh-rsa`: VSPs, ERS 5600) and
+  `legacy`, `internal/legacyssh` (frozen x/crypto/ssh v0.58.0 with `ssh-dss` and
   HMAC-MD5 for old ERS switches), fake devices in `sshtest`. *Done.*
 - **9.2 Settings.** `ssh.*` in `config.yaml`, migration `00005_ssh.sql`, SSH card on the edit
   page (enabled, port, login source, own login, algorithms, host key reset). *Done.*
@@ -321,8 +322,8 @@ WebSocket.
   against a fake ERS SSH server (legacy profile) in Chromium.*
 - **9.4 Hardware test.** ERS 5632FD (legacy algorithms), VSP 4850GTS and VSP 8404 (own
   login), CRS310 (web login): login and show commands only. See section 11 of
-  [hardware-tests.md](hardware-tests.md). *Partly: ERS 5632FD and CRS310 work (2026-11-16);
-  VSPs open.*
+  [hardware-tests.md](hardware-tests.md). *Partly: ERS 5632FD and CRS310 work (2026-11-16); both
+  VSPs connect with `compat`, their login is still to be tested with a working SSH account.*
 
 ## Later
 

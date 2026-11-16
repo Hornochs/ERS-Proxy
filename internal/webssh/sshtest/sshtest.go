@@ -7,6 +7,7 @@ import (
 	"crypto/dsa" //nolint:staticcheck // ERS switches use DSA host keys; the fake device needs one
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -40,6 +41,9 @@ const (
 	MD5Only
 	// KbdInt: modern, keyboard-interactive login only.
 	KbdInt
+	// VOSS: like a VSP with VOSS – SHA-1 key exchanges only, RSA host key
+	// signed with SHA-1 only (ssh-rsa), aes128-ctr.
+	VOSS
 )
 
 var (
@@ -94,6 +98,24 @@ func Start(kind Kind, addr string) (*Device, error) {
 		if kind == OldERS {
 			cfg.MACs = []string{"hmac-md5"}
 		}
+	case VOSS:
+		priv, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			return nil, err
+		}
+		s, err := legacy.NewSignerFromKey(priv)
+		if err != nil {
+			return nil, err
+		}
+		as, ok := s.(legacy.AlgorithmSigner)
+		if !ok {
+			return nil, errors.New("RSA signer without algorithms")
+		}
+		if hostKey, err = legacy.NewSignerWithAlgorithms(as, []string{legacy.KeyAlgoRSA}); err != nil {
+			return nil, err
+		}
+		cfg.KeyExchanges = []string{"diffie-hellman-group14-sha1", "diffie-hellman-group1-sha1"}
+		cfg.Ciphers = []string{"aes128-ctr"}
 	default:
 		_, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {

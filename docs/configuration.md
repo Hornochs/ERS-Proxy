@@ -97,5 +97,5 @@ import and export):
 | ssh_enabled | `true`, `false` | Offer the console for this device (not for `swos`). |
 | ssh_port | 1–65535 | SSH port, default 22. Changing it clears the SSH login and the pinned host key. |
 | ssh_login | empty, `web`, `own`, `ask` | Where the login comes from. Empty: by kind – `web` (the stored web login) for `ers-edm` and `routeros`, `own` (a login stored for SSH) for `vsp-edm` and `edm-direct`, `ask` (typed in the console every time) otherwise. Without a stored login the console asks. |
-| ssh_profile | `auto`, `modern`, `legacy` | SSH algorithms. `legacy` (only `ers-edm`) adds `ssh-dss`, SHA-1 key exchanges, CBC ciphers and HMAC-MD5; `auto` tries the current algorithms first and, for `ers-edm`, falls back to `legacy` when the device offers nothing else. |
+| ssh_profile | `auto`, `modern`, `compat`, `legacy` | SSH algorithms. `modern`: the current defaults. `compat`: also SHA-1 key exchanges, `ssh-rsa` host keys and CBC ciphers (VSPs with VOSS, ERS 5600). `legacy` (only `ers-edm`): additionally `ssh-dss` host keys and HMAC-MD5 through a frozen copy of x/crypto/ssh. `auto` tries `modern`, then `compat`, then (`ers-edm` only) `legacy`, each only when the device offers no common algorithm. |
 | ssh host key | SHA-256 fingerprint | Pinned when an admin confirms it in the console; "Reset SSH key" on the edit page forgets it. |

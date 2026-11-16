@@ -5,7 +5,10 @@
 //
 // Two SSH implementations are used:
 //
-//   - the current golang.org/x/crypto/ssh for every device ("modern" profile),
+//   - the current golang.org/x/crypto/ssh for every device: "modern" with its
+//     default algorithms, "compat" with its insecure algorithms added (SHA-1
+//     key exchanges, ssh-rsa with SHA-1, CBC ciphers) for older switches such
+//     as VSPs with VOSS and ERS 5600,
 //   - internal/legacyssh, a frozen copy of x/crypto/ssh v0.58.0 with ssh-dss
 //     host keys, SHA-1 key exchanges and HMAC-MD5, for old Avaya ERS switches
 //     only ("legacy" profile). The caller allows it per device
@@ -28,11 +31,14 @@ import (
 
 // Algorithm profiles.
 const (
-	// ProfileAuto tries the modern profile first and, where allowed, the
-	// legacy profile when the device offers no common algorithm.
+	// ProfileAuto tries modern, then compat and, where allowed, legacy, each
+	// only when the device offered no common algorithm.
 	ProfileAuto = "auto"
 	// ProfileModern uses the current x/crypto with its default algorithms.
 	ProfileModern = "modern"
+	// ProfileCompat uses the current x/crypto with its insecure algorithms
+	// added (SHA-1 key exchanges, ssh-rsa, CBC ciphers).
+	ProfileCompat = "compat"
 	// ProfileLegacy uses the frozen copy with the insecure algorithms
 	// enabled as well (ERS switches only).
 	ProfileLegacy = "legacy"
@@ -119,11 +125,13 @@ func Profiles(profile string, allowLegacy bool) ([]string, error) {
 	switch profile {
 	case "", ProfileAuto:
 		if allowLegacy {
-			return []string{ProfileModern, ProfileLegacy}, nil
+			return []string{ProfileModern, ProfileCompat, ProfileLegacy}, nil
 		}
-		return []string{ProfileModern}, nil
+		return []string{ProfileModern, ProfileCompat}, nil
 	case ProfileModern:
 		return []string{ProfileModern}, nil
+	case ProfileCompat:
+		return []string{ProfileCompat}, nil
 	case ProfileLegacy:
 		if !allowLegacy {
 			return nil, ErrLegacyNotAllowed
@@ -149,9 +157,12 @@ func Open(ctx context.Context, o Options) (*Session, error) {
 	}
 	for i, p := range profiles {
 		var s *Session
-		if p == ProfileLegacy {
+		switch p {
+		case ProfileLegacy:
 			s, err = dialLegacy(ctx, &o, true)
-		} else {
+		case ProfileCompat:
+			s, err = dialModern(ctx, &o, true)
+		default:
 			s, err = dialModern(ctx, &o, false)
 		}
 		if err == nil {

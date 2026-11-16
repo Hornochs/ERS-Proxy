@@ -139,6 +139,7 @@
       <select name="ssh_profile">
         <option value="auto"{{if eq $d.SSHProfile "auto"}} selected{{end}}>{{.T "ssh.profile.auto"}}</option>
         <option value="modern"{{if eq $d.SSHProfile "modern"}} selected{{end}}>{{.T "ssh.profile.modern"}}</option>
+        <option value="compat"{{if eq $d.SSHProfile "compat"}} selected{{end}}>{{.T "ssh.profile.compat"}}</option>
         {{if eq $d.Kind "ers-edm"}}<option value="legacy"{{if eq $d.SSHProfile "legacy"}} selected{{end}}>{{.T "ssh.profile.legacy"}}</option>{{end}}
       </select>
     </label>
