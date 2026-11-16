@@ -109,7 +109,7 @@ func (p *Proxy) Open(w http.ResponseWriter, r *http.Request, d *store.Device) {
 		p.log.Debug("device opened (session reused)", "device", d.Name, "user", u.Username)
 	} else {
 		ps = p.reg.create(sess.ID, u, d)
-		if d.AutoLogin && d.HasCredentials() && !d.SwOS() {
+		if d.AutoLogin && d.HasCredentials() && d.EDM() {
 			p.tryAutoLogin(r.Context(), ps)
 		}
 		p.log.Debug("device opened", "device", d.Name, "user", u.Username)
@@ -241,8 +241,9 @@ func (p *Proxy) client(d *store.Device) (*upstream.Client, error) {
 		Profile:  d.TLSProfile,
 		MaxConns: p.app.Cfg.Proxy.MaxConnsPerDevice,
 		Timeout:  p.app.Cfg.Proxy.RequestTimeout,
-		// VSP switches (VOSS) drop answers on "Connection: close".
-		KeepAlive: d.VOSS(),
+		// VSP switches (VOSS) drop answers on "Connection: close"; WebFig
+		// sends many small requests.
+		KeepAlive: d.VOSS() || d.RouterOS(),
 		OnProfile: func(profile string) {
 			p.log.Info("TLS profile selected", "device", d.Name, "profile", profile)
 			if err := p.app.DB.SetDeviceTLSProfile(context.Background(), id, profile); err != nil {
@@ -338,7 +339,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case sub == shimPath:
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = io.WriteString(w, shimJS(ps.jar.script(), ps.storage.script(), base, ps.device.SwOS()))
+		_, _ = io.WriteString(w, shimJS(ps.jar.script(), ps.storage.script(), base, ps.device.Rebase(), ps.device.WebApp()))
 		return
 	case sub == cookiePath && r.Method == http.MethodPost:
 		data, err := io.ReadAll(io.LimitReader(r.Body, 4096))
@@ -412,6 +413,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if ck := ps.jar.header(); ck != "" {
 				h.Set("Cookie", ck)
+			}
+			if ps.device.WebApp() {
+				// WebFig serves its menu files (.jg) only gzip-compressed and
+				// answers 406 without "Accept-Encoding: gzip". Responses the
+				// proxy patches are unpacked below; the rest reaches the
+				// browser compressed, with Content-Encoding.
+				h.Set("Accept-Encoding", "gzip")
 			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
@@ -534,6 +542,17 @@ func (p *Proxy) modifyResponse(resp *http.Response, in *http.Request, ps *proxyS
 	// EDM files are Latin-1 or ASCII; patching works on bytes via string
 	// conversion without decoding, so no characters are changed.
 	body, res := patches.Apply(string(raw), base)
+	if ps.device.WebApp() {
+		// WebFig uses absolute paths in attributes and navigations.
+		var n int
+		body, n = patches.Rebase(body, base, isDoc && patches.IsHTML(ctype, sub))
+		if n > 0 {
+			if res.Applied == nil {
+				res.Applied = map[string]int{}
+			}
+			res.Applied["rebase"] += n
+		}
+	}
 	if isDoc && patches.IsHTML(ctype, sub) {
 		body = patches.InjectScript(body, base+strings.TrimPrefix(shimPath, "/"))
 		h.Set("Cache-Control", "no-store")

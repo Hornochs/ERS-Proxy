@@ -19,7 +19,7 @@
     var form = document.getElementById("device-form");
     var sync = function () {
       form.classList.toggle("device-kind-link", kind.value === "link");
-      form.classList.toggle("device-kind-edm-direct", kind.value === "edm-direct" || kind.value === "gwn" || kind.value === "routeros");
+      form.classList.toggle("device-kind-edm-direct", kind.value === "edm-direct" || kind.value === "gwn");
       form.classList.toggle("device-kind-gwn", kind.value === "gwn");
       form.classList.toggle("device-kind-routeros", kind.value === "routeros");
     };

@@ -56,17 +56,17 @@ Browser ──HTTPS──> reverse proxy ──HTTP──> ers-proxy :9050
 | `internal/web` (bulk add) | `handlers_bulk.go` and `device_bulk.html`: `GET/POST /admin/devices/bulk` (admin group). Shared settings are read like `readDevice`; every row (`row_name`, `row_url`, `row_kind`, `row_group`; empty rows skipped, at most 200) is normalised, checked for duplicates in the batch and against existing devices (`devices.Key`, name case-insensitive plus URL). The shared web login (only for rows the server talks to) and SNMP access go through `readAccess`, also used by `deviceCreate`; the admin's password is required when either is given. Any error re-renders the form (422) with per-row messages and creates nothing; otherwise `store.CreateDevices` inserts all devices and their encrypted credentials in one transaction. Audit: `device.create` per device, `device.credentials.set`/`device.snmp.set` (no values) and one `device.bulk_create`. Row cloning and spreadsheet paste are in `static/app.js`. |
 | `internal/web` (configuration) | `configure.go` (`Configurator`, the manager's interface) and `configure_ui.go`: routes below `/dashboard/{id}/configure/` (preview, preview page, apply, confirm, revert) and `/admin/devices/{id}/snmp-write`, registered only when `Server.Configure` is set, inside the admin group (role, CSRF, same origin). Port settings form on the port page, VLAN forms and change history on the switch page, banner (`config_banner` in `layout.html`) for pending, failed and unsaved changes; template `config_preview.html`. |
 | `internal/upstream` | Connection to one device: `http.Transport` with TLS profiles (`modern`, `legacy`), automatic fallback, pinning (`VerifyConnection`), tolerant status line (`fixConn`), `Probe` for confirmation and `tls-probe`. `Client.Transport` repeats reads (GET/HEAD and requests marked with `WithRetry`) up to six times (about 16 s) when the switch drops the connection quickly without an answer – its web server has only a few connection slots for all clients together. `Options.KeepAlive` (set for VOSS devices: `vsp-edm`, `edm-direct`) sends `Connection: keep-alive` instead of `close`, because VOSS resets connections it is asked to close and loses the body; connections are still not reused. `Options.Login` (set for `swos` devices with a stored login) wraps the transport in `digestTransport` (`digest.go`): it answers HTTP Digest challenges (MD5/SHA-256, `qop=auth`) and signs later requests in advance with the last nonce; a request whose signature was refused with the same nonce is not repeated (wrong login). |
-| `internal/edmproxy` | Proxy sessions (token registry, cookie jar), request/response pipeline, isolation headers, cookie shim, diagnostics per device. Serves EDM (ERS, VSP) and MikroTik SwOS (`swos`: the upstream client logs in with the stored web login; without one `/open/{id}` shows a message). |
-| `internal/edmproxy/patches` | Content-based patches for EDM and HTML script injection. |
+| `internal/edmproxy` | Proxy sessions (token registry, cookie jar), request/response pipeline, isolation headers, cookie shim, diagnostics per device. Serves EDM (ERS, VSP), MikroTik RouterOS's WebFig (`routeros`: the user logs in to WebFig; see below) and MikroTik SwOS (`swos`: the upstream client logs in with the stored web login; without one `/open/{id}` shows a message). |
+| `internal/edmproxy/patches` | Content-based patches for EDM, HTML script injection, and `Rebase` (absolute paths of web applications such as WebFig below `/d/{token}/`). |
 | `internal/health` | Periodic reachability checks; certificate change detection; framing check for link devices. |
 | `internal/mockswitch`, `tools/mockswitch` | Fake ERS web server for tests (synthetic files) and local browser tests (real webroot from outside the repository). With `Options.Data` it applies `setVariables` to its data (RowStatus create/destroy for `rcVlanTable`, errors as `snmpErrorStatus`), `SetError` injects answers, and `Options.MaxSessions` answers further logins with `503 Server Too Busy`. |
 | `tools/e2e` | Selenium test of EDM through the proxy (local only). |
 
 ## Opening a device
 
-1. The sidebar link points to `/open/{id}` (ers-edm, vsp-edm, swos) or the device URL (link, edm-direct, gwn and routeros,
+1. The sidebar link points to `/open/{id}` (ers-edm, vsp-edm, swos, routeros) or the device URL (link, edm-direct and gwn,
    `Device.Direct()`). `app.js` decides by the effective open mode (device → user →
-   `ui.default_open_mode`): an iframe tab, a new browser tab, or a popup. `edm-direct`, `gwn` and `routeros` devices
+   `ui.default_open_mode`): an iframe tab, a new browser tab, or a popup. `edm-direct` and `gwn` devices
    never get an iframe tab (`Device.AlwaysTab()`) (`EffectiveOpenMode` turns `embedded` into `tab`): in a frame the
    switch is a third party, so the browser drops its login cookie and shows no certificate
    warning. Links that cannot be framed (plain HTTP in an HTTPS portal, framing ban seen by the
@@ -120,9 +120,26 @@ go to the jar), the reason phrase helper, the export/print window stand-in, and 
 the sandbox blocks Web Storage – `localStorage`/`sessionStorage`. These keep their data in the
 proxy session (`pageStorage`, at most 64 KiB, newest snapshot wins, never sent to the switch).
 Without them VOSS's login page falls back to a `storeEDMUser` cookie, which the jar would send
-to the switch, and the switch rejects the login. For `swos` devices the shim also maps
-absolute `XMLHttpRequest` paths (`/link.b`) below `/d/{token}/`; SwOS's page loads all its data
-that way.
+to the switch, and the switch rejects the login. For `swos` and `routeros` devices
+(`Device.Rebase()`) the shim also maps absolute `XMLHttpRequest` paths (`/link.b`, `/jsproxy`)
+below `/d/{token}/`; SwOS's page loads all its data that way.
+
+RouterOS's WebFig (`Device.WebApp()`) is a script application with absolute paths everywhere.
+For it the proxy also:
+
+- rewrites absolute `src`, `href` and `action` attributes in HTML documents and navigations
+  through `location` (`location.href = "/…"`, `location.replace(\`/…\`)`) in documents and
+  scripts (`patches.Rebase`, reported as patch `rebase`);
+- maps absolute paths in `fetch` and in URLs that page script sets on elements (`setAttribute`
+  and the `href`/`src`/`action` properties) in the shim, and lets the shim's Web Storage answer
+  property access (`localStorage["key"]`);
+- sends `Accept-Encoding: gzip` to the device: WebFig serves its menu files (`.jg`) only
+  compressed and answers `406` otherwise. Responses the proxy patches are unpacked; the others
+  reach the browser compressed, with `Content-Encoding`;
+- keeps upstream connections alive (`KeepAlive`), because WebFig sends many small requests.
+
+WebFig's login and its encrypted protocol (`POST /jsproxy`, a Curve25519 key exchange in the
+browser) pass through unchanged; there is no auto-login.
 
 Request and response headers of logins: the browser's `Authorization` is removed from every
 proxied request, and `WWW-Authenticate` from every response, so the browser never shows a

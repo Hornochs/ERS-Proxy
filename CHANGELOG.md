@@ -15,6 +15,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- MikroTik RouterOS devices now show WebFig through the proxy, embedded in the workspace like
+  the other switches (verified read-only on a CRS310-8G+2S+ with RouterOS 7.25.1). Users log in
+  to WebFig itself (no automatic login: WebFig encrypts its login in the browser); the stored
+  web login is still used for the REST data source. Existing `routeros` devices switch to the
+  embedded view automatically; the isolation setting now applies to them.
 - Container image based on Alpine 3.24 (was 3.21).
 - CI: golangci-lint v2 (`.golangci.yml`, standard linters plus gofmt) and current versions of
   the GitHub Actions.

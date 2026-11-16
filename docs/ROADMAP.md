@@ -27,7 +27,7 @@ _Last updated: 2026-11-16_
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721, CRS310 with RouterOS; stacks pending) |
 | 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.16, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
 
 **Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
 ERS (verified against the mock and on the VSPs), and
@@ -43,6 +43,10 @@ VSP 8404 with VOSS 8.10.1.0 (2026-11-06), which also verified 8.6 on hardware. T
 (needs SNMP write credentials on the switch), then VOSS 7.1 (VSP 4850GTS) – checklist in
 section 9 of [hardware-tests.md](hardware-tests.md). ERS switches are not supported by the
 planner yet.
+
+**Verified on hardware (2026-11-16, step 7.17):** WebFig of the CRS310-8G+2S+ (RouterOS 7.25.1)
+embedded through the proxy in the workspace (Chromium): manual login, Quick Set, Advanced
+menus with live rates, logout; no request left `/d/{token}/`. Read-only.
 
 **Verified on hardware (2026-11-16, step 7.16):** MikroTik CRS310-8G+2S+ with RouterOS 7.25.1,
 read-only. New device kind `routeros` (WebFig opened directly in a tab: it sends
@@ -252,6 +256,11 @@ Never write to a device: no SNMP sets, no EDM `setVariables`.
   `routeros` (SNMP: `sysObjectID` .14988.1, ports by position), data source `routeros` (REST API
   of RouterOS 7: allow-listed GETs plus `/interface/ethernet/monitor` with `once`). *Done:
   verified read-only on a CRS310-8G+2S+ (RouterOS 7.25.1).*
+- **7.17 RouterOS through the proxy.** WebFig embedded under `/d/{token}/` like SwOS: absolute
+  paths in attributes and `location` navigations rewritten (`patches.Rebase`), `fetch`, element
+  URLs and Web Storage property access in the shim, gzip passed through for WebFig's menu files,
+  keep-alive; the user logs in to WebFig (no auto-login). *Done: verified read-only on the
+  CRS310-8G+2S+ (RouterOS 7.25.1) in Chromium.*
 
 ## Phase 8 – Switch configuration (planned)
 

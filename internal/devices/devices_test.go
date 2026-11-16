@@ -491,11 +491,18 @@ func TestNormalizeRouterOS(t *testing.T) {
 	if err := Normalize(d); err != nil || d.URL != "https://192.0.2.40" {
 		t.Fatalf("routeros: %v %q", err, d.URL)
 	}
-	if d.Isolation != store.IsolationSandbox || d.AutoLogin {
+	// WebFig through the proxy: the isolation fallback applies, auto-login
+	// does not (WebFig's login is encrypted JavaScript).
+	if d.Isolation != store.IsolationOff || d.AutoLogin {
 		t.Errorf("isolation %q auto-login %v", d.Isolation, d.AutoLogin)
 	}
-	if d.Proxied() || !d.Upstream() || !d.Direct() || !d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() || d.GWN() {
+	if !d.Proxied() || !d.Upstream() || d.Direct() || d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() || d.GWN() ||
+		!d.WebApp() || !d.Rebase() {
 		t.Fatal("kind helpers for routeros")
+	}
+	sw := &store.Device{Kind: store.KindSwOS}
+	if sw.WebApp() || !sw.Rebase() {
+		t.Fatal("kind helpers for swos")
 	}
 	var fe *FieldError
 	for _, kind := range []string{store.KindERS, store.KindSwOS, store.KindGWN, store.KindEDMDirect, store.KindLink} {

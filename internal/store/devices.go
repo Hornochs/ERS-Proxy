@@ -29,9 +29,10 @@ const (
 	// directly (like edm-direct), while the server reads its web API with the
 	// stored login for the dashboard's "gwn" data source.
 	KindGWN = "gwn"
-	// KindRouterOS is a MikroTik device with RouterOS: the browser opens
-	// WebFig directly (it forbids framing), while the server reads the REST
-	// API with the stored login for the dashboard's "routeros" data source.
+	// KindRouterOS is a MikroTik device with RouterOS: WebFig through the
+	// proxy (the user logs in to WebFig in the sandbox; its login is
+	// encrypted JavaScript, so there is no auto-login), while the server reads
+	// the REST API with the stored login for the "routeros" data source.
 	KindRouterOS = "routeros"
 )
 
@@ -147,17 +148,19 @@ func (d *Device) HasCredentials() bool { return len(d.Credentials) > 0 }
 func (d *Device) HasSNMPCredentials() bool { return len(d.SNMPCredentials) > 0 }
 
 // Proxied reports whether the device is served through the proxy (ers-edm,
-// vsp-edm and swos).
-func (d *Device) Proxied() bool { return d.Kind == KindERS || d.Kind == KindVSP || d.Kind == KindSwOS }
+// vsp-edm, swos and routeros).
+func (d *Device) Proxied() bool {
+	return d.Kind == KindERS || d.Kind == KindVSP || d.Kind == KindSwOS || d.Kind == KindRouterOS
+}
 
 // VOSS reports whether the device runs VOSS (vsp-edm and edm-direct): its
 // web server resets connections it is asked to close.
 func (d *Device) VOSS() bool { return d.Kind == KindVSP || d.Kind == KindEDMDirect }
 
 // Direct reports whether the browser opens the device by its URL (link,
-// edm-direct, gwn and routeros devices).
+// edm-direct and gwn devices).
 func (d *Device) Direct() bool {
-	return d.Kind == KindLink || d.Kind == KindEDMDirect || d.Kind == KindGWN || d.Kind == KindRouterOS
+	return d.Kind == KindLink || d.Kind == KindEDMDirect || d.Kind == KindGWN
 }
 
 // EDM reports whether the device has an EDM: the EDM data source and "Open
@@ -166,18 +169,26 @@ func (d *Device) EDM() bool { return d.Kind == KindERS || d.Kind == KindVSP || d
 
 // Upstream reports whether the server talks to the device's web server
 // itself: TLS settings, the certificate pin and the stored login apply
-// (proxied devices, edm-direct, gwn and routeros).
+// (proxied devices, edm-direct and gwn).
 func (d *Device) Upstream() bool {
-	return d.Proxied() || d.Kind == KindEDMDirect || d.Kind == KindGWN || d.Kind == KindRouterOS
+	return d.Proxied() || d.Kind == KindEDMDirect || d.Kind == KindGWN
 }
 
 // AlwaysTab reports whether the device is opened directly but never in a
-// frame (edm-direct, gwn, routeros): framed, the browser treats the switch as
-// a third party and hides certificate warnings and its login; RouterOS's
-// WebFig also forbids framing (X-Frame-Options: sameorigin).
+// frame (edm-direct, gwn): framed, the browser treats the switch as a third
+// party and hides certificate warnings and its login.
 func (d *Device) AlwaysTab() bool {
-	return d.Kind == KindEDMDirect || d.Kind == KindGWN || d.Kind == KindRouterOS
+	return d.Kind == KindEDMDirect || d.Kind == KindGWN
 }
+
+// WebApp reports whether the device's web interface is a script application
+// that uses absolute paths everywhere (RouterOS's WebFig): the proxy maps
+// them below /d/{token}/ in documents, scripts, fetch and element URLs.
+func (d *Device) WebApp() bool { return d.Kind == KindRouterOS }
+
+// Rebase reports whether the shim maps absolute XMLHttpRequest paths below
+// /d/{token}/ (swos and routeros).
+func (d *Device) Rebase() bool { return d.Kind == KindSwOS || d.Kind == KindRouterOS }
 
 // GWN reports whether the device is a Grandstream GWN switch.
 func (d *Device) GWN() bool { return d.Kind == KindGWN }
