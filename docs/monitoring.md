@@ -228,7 +228,9 @@ up to 8 MiB) and the links between them from the topology above, with the curren
 both directions and a colour by utilisation (from the port at the A end; if that device is
 not monitored, from the B end). A node shows the poll state (up, error, unknown) or, for
 devices without monitoring, the health check. Clicking a monitored node opens its switch page. The
-page refreshes every `refresh` seconds (default 15).
+page refreshes every `refresh` seconds (default 15). Maps are also listed in the workspace
+sidebar and open there as a tab. Several links between the same two devices are drawn side by
+side; the line style shows the source (solid LLDP, dashed MAC tables, dotted by hand).
 
 Admins switch to edit mode to add devices, drag them, upload or remove the background, draw
 a manual link between two ports (for example through a device that is not monitored), hide

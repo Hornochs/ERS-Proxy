@@ -29,6 +29,18 @@
     {{else}}
     <p class="muted small sidebar-empty">{{.T "ws.no_devices"}}</p>
     {{end}}
+    {{if .Data.Maps}}
+    <details class="group" open>
+      <summary>{{.T "nav.maps"}} <span class="muted small">{{len .Data.Maps}}</span></summary>
+      <ul class="device-list">
+        {{range .Data.Maps}}
+        <li class="device" data-name="{{.Name}}">
+          <a class="map-open" href="/maps/{{.ID}}" data-map="{{.ID}}" data-name="{{.Name}}">{{.Name}}</a>
+        </li>
+        {{end}}
+      </ul>
+    </details>
+    {{end}}
   </aside>
   <section class="main-pane">
     <div class="tabbar" role="tablist" id="tabbar"></div>

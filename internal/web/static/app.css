@@ -238,9 +238,9 @@ body.wide > .alert { margin: .5rem 1rem; }
 .device-list { list-style: none; margin: 0; padding: 0; }
 .device { display: flex; align-items: center; gap: .45rem; padding: .25rem .4rem; border-radius: 6px; }
 .device:hover, .device.active { background: var(--surface-2); }
-.device.active .device-open { font-weight: 600; }
-.device-open { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-open:hover { text-decoration: none; }
+.device.active .device-open, .device.active .map-open { font-weight: 600; }
+.device-open, .map-open { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-open:hover, .map-open:hover { text-decoration: none; }
 .device-actions { display: none; gap: .15rem; }
 .device:hover .device-actions, .device:focus-within .device-actions { display: inline-flex; }
 .icon-link { color: var(--muted); padding: 0 .2rem; font-size: .9rem; }
@@ -427,6 +427,7 @@ svg.chart .hover-dot-out { fill: var(--c-out); stroke: var(--surface); stroke-wi
 .util-4, .map-link.util-4 { stroke: #e5702a; background: #e5702a; }
 .util-5, .map-link.util-5 { stroke: #d6332f; background: #d6332f; }
 .map-legend .lg-fdb { background: repeating-linear-gradient(90deg, #7a8796 0 6px, transparent 6px 10px); }
+.map-legend .lg-manual { background: repeating-linear-gradient(90deg, #7a8796 0 2px, transparent 2px 6px); }
 .map-link.selected { stroke-opacity: .6; filter: drop-shadow(0 0 4px #4ea1ff); }
 .map-editing .map-link { cursor: pointer; }
 .map-label-bg { fill: var(--bg); fill-opacity: .85; }

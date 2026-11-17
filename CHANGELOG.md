@@ -29,7 +29,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Network maps (phase 10): devices on a background image (PNG, JPEG or GIF, up to 8 MiB) with
   the links between them (LLDP, else learned MAC addresses, or drawn by hand) and their live
   rates and utilisation. Everyone can view maps (menu "Maps"); admins create them, place devices,
-  upload the background and draw or hide links (audit `map.*`). New migration `00006_maps.sql`.
+  upload the background and draw or hide links (audit `map.*`). Maps also open as workspace
+  tabs. New migration `00006_maps.sql`.
 - The body of state-changing UI requests is capped at 16 MiB.
 - Groundwork for the network map (phase 10): LLDP chassis IDs (the device's own and its
   neighbours', plus the neighbour's management address) and base bridge MAC in the snapshot;

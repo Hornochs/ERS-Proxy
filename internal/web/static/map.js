@@ -89,10 +89,31 @@
   function renderLinks(scale) {
     clear(gLinks);
     clear(gLabels);
+    // Several links between the same two devices (a LAG-less double cable, a
+    // manual link next to an automatic one) are drawn side by side.
+    var pairs = {}, slot = [];
+    (state.links || []).forEach(function (l, idx) {
+      var k = Math.min(l.a.device, l.b.device) + "-" + Math.max(l.a.device, l.b.device);
+      pairs[k] = pairs[k] || [];
+      slot[idx] = { key: k, i: pairs[k].length };
+      pairs[k].push(idx);
+    });
+    var gap = Math.max(10, 18 * scale);
     (state.links || []).forEach(function (l, idx) {
       var a = nodeByID(l.a.device), b = nodeByID(l.b.device);
       if (!a || !b) return;
       var pa = pos(a), pb = pos(b);
+      var n = pairs[slot[idx].key].length;
+      if (n > 1) {
+        // Offset perpendicular to the line, measured in the direction from the
+        // lower to the higher device ID so that it does not depend on A/B.
+        var lo = a.id < b.id ? pa : pb, hi = a.id < b.id ? pb : pa;
+        var dx = hi.x - lo.x, dy = hi.y - lo.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+        var off = (slot[idx].i - (n - 1) / 2) * gap;
+        var ox = -dy / len * off, oy = dx / len * off;
+        pa = { x: pa.x + ox, y: pa.y + oy };
+        pb = { x: pb.x + ox, y: pb.y + oy };
+      }
       var down = (l.a.ifindex && !l.a.up && l.rates) || a.status === "down" || b.status === "down";
       var cls = "map-link " + (down ? "down" : l.rates ? utilClass(l.util) : "unknown") + " src-" + l.source;
       if (selected && selected.kind === "link" && selected.idx === idx) cls += " selected";

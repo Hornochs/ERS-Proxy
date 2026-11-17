@@ -111,6 +111,10 @@ func TestMaps(t *testing.T) {
 	}
 	m := maps[0]
 	base := fmt.Sprintf("/maps/%d", m.ID)
+	// The workspace sidebar lists the map, to open it as a tab.
+	if _, body := h.get("/"); !strings.Contains(body, fmt.Sprintf(`data-map="%d"`, m.ID)) {
+		t.Error("workspace does not list the map")
+	}
 
 	// Background: PNG accepted, SVG and junk refused.
 	if r := h.upload(base+"/background", "image", "plan.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)); r.StatusCode != http.StatusUnprocessableEntity {
