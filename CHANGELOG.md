@@ -50,6 +50,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The certificate check before opening an unconfirmed HTTPS device runs at most once a minute
   per device instead of on every page load (old switches handle the five test handshakes
   slowly).
+- Device import never takes `isolation: off` or a certificate pin from the file: such devices
+  get the sandbox and need their certificate confirmed again; the import result lists them.
 - Only admins open devices. Opening logs in with the stored device account, which usually has
   full rights on the switch, so users (role `user`) now see dashboards and maps but no device
   list. Every open is recorded in the audit log (`device.open`), and changing a user's role

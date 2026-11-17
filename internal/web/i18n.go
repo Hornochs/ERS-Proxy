@@ -189,6 +189,7 @@ var messages = map[string][2]string{
 	"devices.import_submit":     {"Importieren", "Import"},
 	"devices.import_hint":       {"CSV mit Kopfzeile name,group,kind,url (kind: ers-edm, vsp-edm, edm-direct, swos, routeros oder link, Standard ers-edm). Geräte mit gleichem Namen und gleicher Adresse werden übersprungen.", "CSV with header name,group,kind,url (kind: ers-edm, vsp-edm, edm-direct, swos, routeros or link, default ers-edm). Devices with the same name and address are skipped."},
 	"devices.import_errors":     {"Nicht importierte Zeilen", "Rows not imported"},
+	"devices.import_reset":      {"Sicherheitseinstellungen nicht übernommen (Isolation „aus“ oder Zertifikats-Pin): bitte am Gerät prüfen und Zertifikat neu bestätigen", "Security settings not imported (isolation \"off\" or certificate pin): check the device and confirm its certificate again"},
 	"devices.export":            {"Exportieren", "Export"},
 	"devices.export_hint":       {"Der Export enthält keine gespeicherten Passwörter.", "The export contains no stored passwords."},
 	"devices.tls":               {"HTTPS-Zertifikat", "HTTPS certificate"},

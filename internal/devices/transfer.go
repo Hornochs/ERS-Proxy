@@ -238,6 +238,9 @@ type ImportResult struct {
 	Created       int
 	Skipped       int // same name and address already present
 	Errors        []string
+	// Reset lists devices whose security settings were not taken from the
+	// file (isolation off, certificate pin): an admin decides on those.
+	Reset []string
 }
 
 // Key identifies a device by name (case-insensitive) and address; devices with
@@ -295,6 +298,18 @@ func Import(ctx context.Context, db *store.DB, e *Export) (*ImportResult, error)
 		if ed.Health != nil {
 			d.HealthEnabled = *ed.Health
 		}
+		// A file must not weaken a device's protection or decide which
+		// certificate is trusted: isolation "off" falls back to the default
+		// and a pin is never imported (an admin confirms the certificate).
+		var reset []string
+		if d.Isolation == store.IsolationOff {
+			d.Isolation = ""
+			reset = append(reset, "isolation")
+		}
+		if d.TLSPin != "" {
+			d.TLSPin = ""
+			reset = append(reset, "certificate pin")
+		}
 		if err := Normalize(d); err != nil {
 			res.Errors = append(res.Errors, "device "+strconv.Itoa(i+1)+" ("+ed.Name+"): "+err.Error())
 			continue
@@ -315,6 +330,9 @@ func Import(ctx context.Context, db *store.DB, e *Export) (*ImportResult, error)
 		}
 		have[key] = true
 		res.Created++
+		if len(reset) > 0 {
+			res.Reset = append(res.Reset, ed.Name+": "+strings.Join(reset, ", "))
+		}
 	}
 	return res, nil
 }

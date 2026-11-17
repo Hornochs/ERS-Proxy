@@ -335,8 +335,17 @@ func TestEDMDirectExportImport(t *testing.T) {
 	src := open()
 	in := &Export{Version: ExportVersion, Devices: []ExportDevice{{Name: "vsp", Kind: store.KindEDMDirect, URL: "https://vsp.example",
 		Isolation: store.IsolationOff, TLSMode: store.TLSLegacy, TLSPin: pin}}}
-	if res, err := Import(ctx, src, in); err != nil || res.Created != 1 {
+	res, err := Import(ctx, src, in)
+	if err != nil || res.Created != 1 || len(res.Reset) != 1 {
 		t.Fatalf("import: %+v %v", res, err)
+	}
+	// The pin is never taken from a file: an admin confirms the certificate.
+	devs, _ := src.ListDevices(ctx)
+	if devs[0].TLSPin != "" {
+		t.Fatal("pin imported from a file")
+	}
+	if err := src.SetDeviceTLS(ctx, devs[0].ID, pin, store.TLSLegacy); err != nil {
+		t.Fatal(err)
 	}
 	out, err := Build(ctx, src)
 	if err != nil {
@@ -361,9 +370,9 @@ func TestEDMDirectExportImport(t *testing.T) {
 	if res, err := Import(ctx, dst, back); err != nil || res.Created != 1 {
 		t.Fatalf("re-import: %+v %v", res, err)
 	}
-	devs, _ := dst.ListDevices(ctx)
+	devs, _ = dst.ListDevices(ctx)
 	d := devs[0]
-	if d.Kind != store.KindEDMDirect || d.TLSMode != store.TLSLegacy || d.TLSPin != pin || d.Isolation != store.IsolationSandbox {
+	if d.Kind != store.KindEDMDirect || d.TLSMode != store.TLSLegacy || d.TLSPin != "" || d.Isolation != store.IsolationSandbox {
 		t.Fatalf("round trip: %+v", d)
 	}
 }
@@ -569,5 +578,38 @@ func TestReadLimits(t *testing.T) {
 	ok := "name,url\n" + strings.Repeat("a", MaxImportBytes-len("name,url\n"))
 	if _, err := ReadCSV(strings.NewReader(ok)); err != nil {
 		t.Fatalf("file of exactly the limit: %v", err)
+	}
+}
+
+func TestImportNeverWeakensSecurity(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.Open(store.Options{Path: filepath.Join(t.TempDir(), "t.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
+	}
+	pin := strings.Repeat("ab", 32)
+	e := &Export{Devices: []ExportDevice{
+		{Name: "Risky", Kind: store.KindERS, URL: "https://192.0.2.5", Isolation: store.IsolationOff, TLSPin: pin},
+		{Name: "Normal", Kind: store.KindERS, URL: "http://192.0.2.6"},
+	}}
+	res, err := Import(ctx, db, e)
+	if err != nil || res.Created != 2 {
+		t.Fatalf("import: %+v %v", res, err)
+	}
+	if len(res.Reset) != 1 || !strings.Contains(res.Reset[0], "Risky") {
+		t.Errorf("reset notes = %v", res.Reset)
+	}
+	devs, err := db.ListDevices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range devs {
+		if d.Isolation == store.IsolationOff || d.TLSPin != "" {
+			t.Errorf("%s imported with isolation %q pin %q", d.Name, d.Isolation, d.TLSPin)
+		}
 	}
 }

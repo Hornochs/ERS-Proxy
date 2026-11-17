@@ -74,8 +74,8 @@ Per device (web UI or import file):
 | url | `http(s)://host[:port]` | For `ers-edm`, `vsp-edm`, `edm-direct` and `swos` without a path (SwOS speaks HTTP only). For `link` the full URL. |
 | open_mode | `inherit`, `embedded`, `tab`, `window` | `inherit` uses the user's default, then `ui.default_open_mode`. `embedded` becomes `tab` for `edm-direct` devices and for links that cannot be framed. |
 | tls_mode | `auto`, `modern`, `legacy` | `auto` tries TLS 1.2+ first and falls back to TLS 1.0–1.2 with old ciphers; the result is remembered. |
-| tls_pin | 64 hex characters | SHA-256 of the switch certificate; set by confirming it in the UI. |
-| isolation | `sandbox`, `off` | `off` disables the browser sandbox for this device (only if an EDM feature fails in it; see security.md). |
+| tls_pin | 64 hex characters | SHA-256 of the switch certificate; set by confirming it in the UI. Exported, but never taken from an import file: confirm the certificate again after an import. |
+| isolation | `sandbox`, `off` | `off` disables the browser sandbox for this device (only if an EDM feature fails in it; see security.md). Only in the UI: an import file with `off` gets `sandbox`. |
 | health | `true`, `false` | Include in the reachability checks. |
 | monitor_source | `none`, `snmp`, `edm`, `swos`, `routeros` | Data source of the port dashboard. `edm` only for kinds `ers-edm`, `vsp-edm` and `edm-direct` (experimental), `swos` (SwOS's web API, uses the stored web login) only for kind `swos`, `routeros` (RouterOS REST API, uses the stored web login) only for kind `routeros`. Default `none`. |
 | monitor_driver | `auto`, `generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`, `routeros` | Which driver interprets the data. Default `auto`. |

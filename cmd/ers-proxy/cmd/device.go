@@ -139,6 +139,9 @@ var deviceImportCmd = &cobra.Command{
 		e.audit(cmd.Context(), store.AuditEntry{Actor: "cli", Action: "device.import", Target: args[0],
 			Details: fmt.Sprintf("created=%d skipped=%d errors=%d", res.Created, res.Skipped, len(res.Errors))})
 		fmt.Printf("%d created, %d already present, %d invalid, %d new groups\n", res.Created, res.Skipped, len(res.Errors), res.GroupsCreated)
+		for _, msg := range res.Reset {
+			fmt.Println("security settings not imported:", msg)
+		}
 		return nil
 	},
 }

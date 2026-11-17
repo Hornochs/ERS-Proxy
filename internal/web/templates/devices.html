@@ -11,6 +11,11 @@
   <h3>{{$.T "devices.import_errors"}}</h3>
   <ul class="small">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>
 </section>
+{{end}}{{if .Reset}}
+<section class="card notice">
+  <h3>{{$.T "devices.import_reset"}}</h3>
+  <ul class="small">{{range .Reset}}<li>{{.}}</li>{{end}}</ul>
+</section>
 {{end}}{{end}}
 <section class="card">
   {{if .Data.Devices}}
