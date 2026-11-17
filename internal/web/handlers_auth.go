@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/subtle"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/lan-dot-party/ers-proxy/internal/app"
@@ -19,12 +20,42 @@ type loginData struct {
 	Username string
 }
 
+// newIPLoginLimiter allows 20 failed logins per client IP and 10 minutes,
+// across all usernames (password spraying), then locks that IP for 5 minutes.
+func newIPLoginLimiter() *auth.LoginLimiter {
+	l := auth.NewLoginLimiter()
+	l.MaxFailures = 20
+	return l
+}
+
+// safeNext accepts only a local path as the target after login. Control
+// characters and backslashes are refused because browsers drop or turn them
+// into "/" (so "/\t/host" or "/\\host" would leave the site), and the
+// proxy's /d/ paths are never a login target.
 func safeNext(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") ||
-		strings.HasPrefix(next, "/d/") {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/d/") {
+		return "/"
+	}
+	for _, c := range next {
+		if c < 0x20 || c == 0x7f || c == '\\' {
+			return "/"
+		}
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || strings.HasPrefix(u.Path, "//") {
 		return "/"
 	}
 	return next
+}
+
+// truncateKey bounds what a client-chosen username adds to the limiter's
+// in-memory keys.
+func truncateKey(s string) string {
+	const max = 128
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
 }
 
 func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
@@ -61,8 +92,8 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := s.ClientIP(r)
-	keys := []string{"ip:" + ip, "user:" + strings.ToLower(username)}
-	if err := s.login.Check(keys...); err != nil {
+	keys := []string{ip + "|" + strings.ToLower(truncateKey(username))}
+	if err := s.login.Check(keys...); err != nil || s.loginIP.Check(ip) != nil {
 		s.renderLogin(w, r, http.StatusTooManyRequests, "error.locked", next, username)
 		return
 	}
@@ -102,6 +133,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) loginFailed(w http.ResponseWriter, r *http.Request, keys []string, next, username string) {
 	s.login.Fail(keys...)
+	s.loginIP.Fail(s.ClientIP(r))
 	if err := s.DB.Audit(r.Context(), store.AuditEntry{Actor: "anonymous", Action: "login.failed", Target: username,
 		IP: s.ClientIP(r)}); err != nil {
 		s.Log.Error("audit log", "err", err, "action", "login.failed")

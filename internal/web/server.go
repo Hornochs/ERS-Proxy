@@ -53,9 +53,13 @@ type StatusSource interface {
 // Server is the web UI.
 type Server struct {
 	*app.App
-	pages  map[string]*template.Template
-	login  *auth.LoginLimiter
-	reauth *auth.LoginLimiter
+	pages map[string]*template.Template
+	// login locks (client IP, username) pairs; loginIP locks a client IP that
+	// tries many usernames. Neither locks a username for everyone, so nobody
+	// can lock the admin out.
+	login   *auth.LoginLimiter
+	loginIP *auth.LoginLimiter
+	reauth  *auth.LoginLimiter
 	// Opener handles ers-edm devices; without it they cannot be opened.
 	Opener Opener
 	// Health provides status dots; optional.
@@ -94,7 +98,7 @@ var pageFiles = []string{
 
 // New parses all templates.
 func New(a *app.App) (*Server, error) {
-	s := &Server{App: a, pages: map[string]*template.Template{}, login: auth.NewLoginLimiter(), reauth: auth.NewLoginLimiter()}
+	s := &Server{App: a, pages: map[string]*template.Template{}, login: auth.NewLoginLimiter(), loginIP: newIPLoginLimiter(), reauth: auth.NewLoginLimiter()}
 	for _, name := range pageFiles {
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}
 		if name == "device_bulk" {

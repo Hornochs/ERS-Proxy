@@ -8,9 +8,13 @@ Three things matter:
 1. `public_url` in `config.yaml` is exactly what the browser shows, e.g.
    `https://ers.example.org`. ERS-Proxy compares the `Origin` header of every form submission
    with it and rejects anything else.
-2. The proxy passes the `Host` header through and sets `X-Real-IP` / `X-Forwarded-For`; list
-   the proxy's address in `trusted_proxies` so that login lockouts and the audit log see the
-   real client address.
+2. The proxy passes the `Host` header through and appends the client to `X-Forwarded-For`
+   (nginx: `$proxy_add_x_forwarded_for`; Caddy and Traefik do it by default); list the proxy's
+   address in `trusted_proxies` so that login lockouts and the audit log see the real client
+   address. ERS-Proxy reads `X-Forwarded-For` from the right and skips trusted proxies, so
+   entries a client sends itself are ignored; `X-Real-IP` is only a fallback. Without that
+   entry every client looks like the proxy, and ERS-Proxy logs a warning on the first such
+   request.
 3. Responses must not be buffered for too long and request bodies of a few MB must be allowed
    (device import). EDM itself sends small requests.
 

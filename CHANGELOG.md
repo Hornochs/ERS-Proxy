@@ -15,6 +15,14 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Login lockout: 5 failures lock the pair of client address and username, 20 failures lock a
+  client address that tries many usernames; a username is no longer locked for everyone, so
+  nobody can lock the admin out. Behind a reverse proxy the client address comes from
+  `X-Forwarded-For` read right to left (trusted proxies skipped), `X-Real-IP` is only a
+  fallback, and a warning is logged when proxy headers arrive from an address that is not in
+  `trusted_proxies`.
+- The page after login accepts only local paths (control characters and backslashes are
+  refused).
 - Only admins open devices. Opening logs in with the stored device account, which usually has
   full rights on the switch, so users (role `user`) now see dashboards and maps but no device
   list. Every open is recorded in the audit log (`device.open`), and changing a user's role

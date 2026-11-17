@@ -11,7 +11,7 @@ writes a commented example ([config.example.yaml](config.example.yaml)).
 |---|---|---|
 | `listen` | `127.0.0.1:9050` | HTTP listen address. Behind a reverse proxy, keep it on localhost. |
 | `public_url` | `http://<listen>` | URL as the browser sees it: scheme, host, port, **no path**. `https://` marks cookies `Secure`. Every form submission must come from this origin. |
-| `trusted_proxies` | `[127.0.0.1, ::1]` | Addresses/networks whose `X-Real-IP` / `X-Forwarded-For` are trusted. |
+| `trusted_proxies` | `[127.0.0.1, ::1]` | Reverse proxies (addresses/networks) whose `X-Forwarded-For` (read right to left, trusted hops skipped) or `X-Real-IP` give the client address. |
 | `secret_key_file` | `secret.key` | AES-256 key (64 hex characters) for stored switch passwords. Created if missing. Losing it makes stored passwords unusable (devices keep working without auto-login). |
 | `storage.path` | `data/ers-proxy.db` | SQLite database. |
 | `log.level` | `info` | `debug`, `info`, `warn`, `error`. `debug` logs every request (proxy tokens redacted) and applied patches. |

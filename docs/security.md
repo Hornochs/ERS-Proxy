@@ -32,8 +32,10 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 - Every page except `/login`, `/health` and static files requires a login.
 - Passwords: Argon2id (m=19 MiB, t=2, p=1), at least 10 characters, no default account. The
   first admin is created on the command line.
-- Login lockout per IP address and per username (5 failures in 10 minutes lock for 5 minutes),
-  one uniform error message, constant time for unknown users.
+- Login lockout per client address and username (5 failures in 10 minutes lock that pair for
+  5 minutes) and per client address across usernames (20 failures), never per username alone,
+  so nobody can lock the admin out; one uniform error message, constant time for unknown
+  users. After login only local paths are accepted as the redirect target.
 - Sessions are stored server-side as SHA-256 of the cookie value. The cookie is `HttpOnly`,
   `SameSite=Strict`, and `Secure` when `public_url` starts with `https://`. Sessions expire
   after 12 hours of inactivity; changing a password ends all sessions of the user.
