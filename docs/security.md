@@ -225,8 +225,9 @@ on. Without it no console route exists (404). With it:
   of kind `ers-edm`**, and with the profile `auto` only after `modern` and `compat` found no
   common algorithm. A test ensures that only the legacy dialer imports it. A panic while it
   parses data from a device ends that connection, not the process. The copy gets no automatic
-  security fixes (govulncheck does not see it as x/crypto): check x/crypto advisories for `ssh`
-  and patch the copy when its client code is affected. The algorithms of both steps are weak
+  security fixes (govulncheck does not see it as x/crypto, and CodeQL findings in it are
+  filtered out before the upload, since they are upstream code; the secret scan skips it too):
+  check x/crypto advisories for `ssh` and patch the copy when its client code is affected. The algorithms of both steps are weak
   (SHA-1, CBC, DSA-1024); the host key pin protects against a later impersonation, not the first
   contact. Keep such switches in a management network.
 - **The terminal library** (xterm.js, MIT, vendored unmodified in `static/vendor/xterm/`)

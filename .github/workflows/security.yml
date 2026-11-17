@@ -41,6 +41,22 @@ jobs:
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:go
+          upload: never
+          output: sarif-results
+      # internal/legacyssh is a frozen copy of x/crypto/ssh v0.58.0 that must
+      # not be changed (docs/security.md); its findings are upstream code, so
+      # they are dropped before the upload. Everything else is reported.
+      - name: Drop findings in the frozen x/crypto copy
+        run: |
+          jq '.runs[].results |= map(select(
+                [.locations[]?.physicalLocation.artifactLocation.uri // ""]
+                | any(startswith("internal/legacyssh/")) | not))' \
+            sarif-results/go.sarif > filtered.sarif
+          echo "kept $(jq '[.runs[].results[]] | length' filtered.sarif) of $(jq '[.runs[].results[]] | length' sarif-results/go.sarif) results"
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: filtered.sarif
+          category: /language:go
 
   dependency-review:
     name: Dependency review
