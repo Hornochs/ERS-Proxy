@@ -202,14 +202,27 @@ func shimJS(cookies, storage, base string, rebase, webApp bool) string {
     } catch (e) { /* leave Web Storage alone */ }
   }
   // "Open in EDM" for a port: once EDM's device view shows the port
-  // (element Port_<ifIndex> on ERS and VSP), select it and open its edit
-  // dialog, as a click and a double-click would. Pages without the device
-  // view (the login page) leave the request for the next page.
+  // (element Port_<ifIndex> on VSP and copper ERS ports; ERS names PoE, SFP,
+  // XFP and rear ports Poe_Port_, Gbic_Port_, Fiber_Port_ and Rear_Port_,
+  // and draws both Port_ and Gbic_Port_ for a combo port), select it and
+  // open its edit dialog, as a click and a double-click would. Pages without
+  // the device view (the login page) leave the request for the next page.
+  var portElement = function (n) {
+    var found = null;
+    var kinds = ["Port_", "Poe_Port_", "Gbic_Port_", "Fiber_Port_", "Rear_Port_"];
+    for (var i = 0; i < kinds.length; i++) {
+      var e = document.getElementById(kinds[i] + n);
+      if (!e) continue;
+      if (e.offsetParent !== null) return e; // the one that is shown
+      found = found || e;
+    }
+    return found;
+  };
   var tries = 0;
   var selectPort = function () {
     var n = data["x:port"];
     if (!n || !/^[0-9]+$/.test(n)) return;
-    var el = document.getElementById("Port_" + n);
+    var el = portElement(n);
     if (!el || !window.theView) {
       // ERS (Ext JS 2) draws the device view only once its tab is shown;
       // "Switch Summary" is in front after the login.
