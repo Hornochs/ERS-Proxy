@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lan-dot-party/ers-proxy/internal/monitor"
 	"github.com/lan-dot-party/ers-proxy/internal/monitor/poller"
@@ -558,7 +559,7 @@ func (m *Manager) autoRevert(ctx context.Context, rec *store.ConfigChange, from 
 	case err != nil:
 		m.log().Warn("configuration revert failed", "change", rec.ID, "device", target, "err", err)
 		if rec.State != store.ChangeRevertFailed {
-			m.audit(ctx, "config.revert_failed", target, fmt.Sprintf("change %d (%s): %v", rec.ID, why, err))
+			m.audit(ctx, "config.revert_failed", target, fmt.Sprintf("change %d (%s): %s", rec.ID, why, TruncateText(err.Error())))
 		}
 	default:
 		m.log().Info("configuration change reverted", "change", rec.ID, "device", target, "reason", why)
@@ -600,6 +601,7 @@ func (m *Manager) retryDue(id int64, now time.Time) bool {
 func (m *Manager) move(ctx context.Context, id int64, from []string, to string, deadline *time.Time, errText string) bool {
 	u := store.ChangeUpdate{Deadline: deadline}
 	if errText != "" {
+		errText = TruncateText(errText) // may contain text the switch sent
 		u.Error = &errText
 	}
 	switch to {
@@ -645,4 +647,21 @@ func summary(p *Plan) string {
 		s += line
 	}
 	return s
+}
+
+// MaxErrorText is the longest error text from a switch that is stored (in the
+// change history and the audit log).
+const MaxErrorText = 1024
+
+// TruncateText cuts s to MaxErrorText bytes on a rune boundary. Error texts
+// that a switch sends are not trusted to be short.
+func TruncateText(s string) string {
+	if len(s) <= MaxErrorText {
+		return s
+	}
+	cut := MaxErrorText
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }

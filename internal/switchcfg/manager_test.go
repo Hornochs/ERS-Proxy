@@ -8,9 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lan-dot-party/ers-proxy/internal/monitor"
 	"github.com/lan-dot-party/ers-proxy/internal/monitor/poller"
@@ -667,4 +669,19 @@ func TestPlannerRefusal(t *testing.T) {
 		t.Fatalf("deleting the management VLAN: %v", err)
 	}
 	e.noChangeRow()
+}
+
+func TestTruncateText(t *testing.T) {
+	if got := switchcfg.TruncateText("short"); got != "short" {
+		t.Fatalf("%q", got)
+	}
+	long := strings.Repeat("ä", 2000) // 2-byte runes
+	got := switchcfg.TruncateText(long)
+	if len(got) != switchcfg.MaxErrorText || !utf8.ValidString(got) {
+		t.Fatalf("%d bytes, valid %v", len(got), utf8.ValidString(got))
+	}
+	got = switchcfg.TruncateText("x" + strings.Repeat("€", 2000)) // cut falls inside a rune
+	if len(got) > switchcfg.MaxErrorText || !utf8.ValidString(got) || len(got) < switchcfg.MaxErrorText-3 {
+		t.Fatalf("%d bytes, valid %v", len(got), utf8.ValidString(got))
+	}
 }
