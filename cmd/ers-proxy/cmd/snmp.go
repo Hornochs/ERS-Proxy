@@ -24,6 +24,7 @@ const snmpCommunityEnv = "ERSPROXY_SNMP_COMMUNITY"
 func init() {
 	addTargetFlags(snmpTestCmd)
 	snmpTestCmd.Flags().Bool("collect", false, "also run the dashboard driver and print the port table")
+	snmpTestCmd.Flags().Bool("fdb", false, "with --collect: also read and print the learned MAC address table")
 	addTargetFlags(snmpCaptureCmd)
 	snmpCaptureCmd.Flags().String("out", "", "write to this file (default stdout; never overwrites)")
 	snmpCaptureCmd.Flags().Bool("raw", false, "do not anonymise names, aliases, serial numbers and neighbours")
@@ -43,7 +44,8 @@ an ad-hoc target whose v2c community is read from the environment variable
 			return err
 		}
 		if collect, _ := cmd.Flags().GetBool("collect"); collect {
-			return runCollect(cmd.Context(), target)
+			fdb, _ := cmd.Flags().GetBool("fdb")
+			return runCollect(cmd.Context(), target, fdb)
 		}
 		return runSNMPTest(cmd.Context(), target)
 	},
@@ -127,7 +129,7 @@ Sends only GET/GETBULK requests.`,
 }
 
 // runCollect shows what the detected driver reads from a device.
-func runCollect(ctx context.Context, t snmp.Target) error {
+func runCollect(ctx context.Context, t snmp.Target, fdb bool) error {
 	r, err := snmpsrc.Open(ctx, t)
 	if err != nil {
 		return err
@@ -140,6 +142,9 @@ func runCollect(ctx context.Context, t snmp.Target) error {
 	d, err := monitor.NewRegistry(drivers.All()...).Detect(sys)
 	if err != nil {
 		return err
+	}
+	if fdb {
+		ctx = monitor.WithFDB(ctx)
 	}
 	snap, err := d.Collect(ctx, r)
 	if err != nil {
@@ -165,7 +170,30 @@ func runCollect(ctx context.Context, t snmp.Target) error {
 	for _, n := range snap.Notes {
 		fmt.Println("note:", n)
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if fdb {
+		printFDB(snap)
+	}
+	return nil
+}
+
+// printFDB prints the device's own MACs and its learned MAC address table,
+// one entry per line, for checking the map's FDB links by hand.
+func printFDB(snap *monitor.Snapshot) {
+	fmt.Printf("chassis id: %s, base MAC: %s\n", snap.System.ChassisID, snap.System.BaseMAC)
+	names := map[int]string{}
+	for _, p := range snap.Ports {
+		names[p.IfIndex] = p.Name
+	}
+	fmt.Printf("MAC address table: %d entries\n", len(snap.FDB))
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "MAC\tVLAN\tIFINDEX\tPORT")
+	for _, e := range snap.FDB {
+		fmt.Fprintf(tw, "%s\t%d\t%d\t%s\n", e.MAC, e.VLAN, e.IfIndex, names[e.IfIndex])
+	}
+	_ = tw.Flush()
 }
 
 func deviceTarget(ctx context.Context, id int64) (snmp.Target, error) {
