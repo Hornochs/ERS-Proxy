@@ -557,3 +557,17 @@ func TestCSVFormulaEscapeRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestReadLimits(t *testing.T) {
+	big := "name,url\n" + strings.Repeat("a", MaxImportBytes)
+	if _, err := ReadCSV(strings.NewReader(big)); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("oversized CSV: %v", err)
+	}
+	if _, err := ReadJSON(strings.NewReader(`{"version":1,"x":"` + strings.Repeat("a", MaxImportBytes) + `"}`)); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("oversized JSON: %v", err)
+	}
+	ok := "name,url\n" + strings.Repeat("a", MaxImportBytes-len("name,url\n"))
+	if _, err := ReadCSV(strings.NewReader(ok)); err != nil {
+		t.Fatalf("file of exactly the limit: %v", err)
+	}
+}

@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -143,10 +144,31 @@ func WriteCSV(w io.Writer, e *Export) error {
 	return cw.Error()
 }
 
+// MaxImportBytes is the largest import file ReadJSON and ReadCSV accept. It
+// stays below the request body cap of the web server.
+const MaxImportBytes = 4 << 20
+
+// readLimited reads all of r; a file longer than MaxImportBytes is an error
+// instead of being cut off silently.
+func readLimited(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, MaxImportBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read import file: %w", err)
+	}
+	if len(data) > MaxImportBytes {
+		return nil, fmt.Errorf("import file is larger than %d MiB", MaxImportBytes>>20)
+	}
+	return data, nil
+}
+
 // ReadJSON parses an export.
 func ReadJSON(r io.Reader) (*Export, error) {
 	var e Export
-	dec := json.NewDecoder(io.LimitReader(r, 4<<20))
+	data, err := readLimited(r)
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&e); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
@@ -160,7 +182,11 @@ func ReadJSON(r io.Reader) (*Export, error) {
 // ReadCSV parses a CSV file with the header name,group,kind,url[,open_mode][,notes].
 // Column order is taken from the header; kind defaults to ers-edm.
 func ReadCSV(r io.Reader) (*Export, error) {
-	cr := csv.NewReader(io.LimitReader(r, 4<<20))
+	data, err := readLimited(r)
+	if err != nil {
+		return nil, err
+	}
+	cr := csv.NewReader(bytes.NewReader(data))
 	cr.FieldsPerRecord = -1
 	cr.TrimLeadingSpace = true
 	rows, err := cr.ReadAll()
