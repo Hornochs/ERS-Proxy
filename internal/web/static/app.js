@@ -145,6 +145,7 @@
 
   function deviceLink(id) {
     if (String(id).indexOf("ssh-") === 0) return sshLink(String(id).slice(4));
+    if (String(id).indexOf("map-") === 0) return mapLink(String(id).slice(4));
     return workspace.querySelector('.device-open[data-id="' + id + '"]');
   }
 
@@ -155,6 +156,16 @@
     if (!a) return null;
     return {
       dataset: { id: "ssh-" + id, kind: "ssh", name: a.dataset.name, mode: "embedded" },
+      getAttribute: function () { return a.getAttribute("href"); }
+    };
+  }
+
+  // mapLink describes a network map like a device link ("map-<id>").
+  function mapLink(id) {
+    var a = workspace.querySelector('[data-map="' + id + '"]');
+    if (!a) return null;
+    return {
+      dataset: { id: "map-" + id, kind: "map", name: a.dataset.name, mode: "embedded" },
       getAttribute: function () { return a.getAttribute("href"); }
     };
   }
@@ -183,8 +194,9 @@
     });
     var items = workspace.querySelectorAll(".device");
     for (var i = 0; i < items.length; i++) {
-      var a = items[i].querySelector(".device-open");
-      items[i].classList.toggle("active", a && a.dataset.id === id);
+      var a = items[i].querySelector(".device-open, .map-open");
+      var aid = a && (a.dataset.map ? "map-" + a.dataset.map : a.dataset.id);
+      items[i].classList.toggle("active", !!a && aid === id);
     }
     empty.hidden = tabs.length > 0;
     var t = find(id);
@@ -286,6 +298,11 @@
     if (a.dataset.ssh) {
       e.preventDefault();
       openTab(sshLink(a.dataset.ssh));
+      return;
+    }
+    if (a.dataset.map) {
+      e.preventDefault();
+      openTab(mapLink(a.dataset.map));
       return;
     }
     if (!a.classList.contains("device-open")) {

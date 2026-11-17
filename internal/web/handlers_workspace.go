@@ -39,6 +39,8 @@ type workspaceData struct {
 	Count  int
 	// SSH: the SSH console is enabled and the user may use it (admins).
 	SSH bool
+	// Maps are the network maps, opened as workspace tabs.
+	Maps []*store.Map
 }
 
 // EffectiveOpenMode resolves device → user → global default. Link devices
@@ -86,6 +88,9 @@ func (s *Server) sidebar(r *http.Request) (*workspaceData, error) {
 	}
 	u := app.User(r.Context())
 	data := &workspaceData{Count: len(devs), SSH: s.SSH != nil && u.Can(store.RoleAdmin)}
+	if data.Maps, err = s.DB.ListMaps(r.Context()); err != nil {
+		return nil, err
+	}
 	idx := map[string]int{}
 	for _, d := range devs {
 		sd := sidebarDevice{Device: d, Mode: s.EffectiveOpenMode(u, d), Href: "/open/" + strconv.FormatInt(d.ID, 10)}

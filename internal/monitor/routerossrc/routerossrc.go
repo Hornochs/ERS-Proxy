@@ -18,13 +18,18 @@
 //     untagged port lists from the bridge VLAN table (only for bridges with
 //     VLAN filtering). Members of a bond are listed with the bond too, so the
 //     faceplate shows the VLANs on the physical ports;
-//   - LLDP-MIB: lldpRemSysName and lldpRemPortId from /ip/neighbor (LLDP, CDP
-//     and MNDP neighbours).
+//   - LLDP-MIB: lldpRemSysName, lldpRemPortId and, when the neighbour has a
+//     MAC address, lldpRemChassisId (subtype 4) from /ip/neighbor (LLDP, CDP
+//     and MNDP neighbours);
+//   - dot1qTpFdbPort from /interface/bridge/host (index vid.mac; the value is
+//     the bridge port number, which equals the ifIndex of the port; entries
+//     of the bridge itself are skipped).
 package routerossrc
 
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/lan-dot-party/ers-proxy/internal/monitor"
@@ -223,11 +228,30 @@ func objects(st *routeros.State) map[string]map[string]monitor.Value {
 		set("lldpRemSysName", idx, text(n.Identity))
 		set("lldpRemPortId", idx, text(n.PortID))
 		set("lldpRemPortDesc", idx, text(""))
+		if mac := monitor.NormalizeMAC(n.MAC); mac != "" {
+			set("lldpRemChassisIdSubtype", idx, integer(4))
+			set("lldpRemChassisId", idx, text(mac))
+		}
 		caps := []byte{0, 0}
 		if n.Bridge {
 			caps[0] = 0x20 // bit 2: bridge
 		}
 		set("lldpRemSysCapEnabled", idx, monitor.Value{Kind: monitor.KindBytes, Bytes: caps})
+	}
+	for _, h := range st.Hosts {
+		i := byName[h.Interface]
+		mac := macBytes(h.MAC)
+		if i == nil || mac == nil {
+			continue
+		}
+		if _, bp := o["dot1dBasePortIfIndex"][strconv.Itoa(i.ID)]; !bp {
+			continue
+		}
+		idx := strconv.Itoa(h.VID)
+		for _, b := range mac {
+			idx += "." + strconv.Itoa(int(b))
+		}
+		set("dot1qTpFdbPort", idx, integer(i.ID))
 	}
 	if !st.VLANFiltering {
 		return o
@@ -265,4 +289,21 @@ func objects(st *routeros.State) map[string]map[string]monitor.Value {
 		set("dot1qVlanCurrentUntaggedPorts", "0."+vid, monitor.Value{Kind: monitor.KindBytes, Bytes: untag})
 	}
 	return o
+}
+
+// macBytes parses a MAC address ("AA:BB:CC:DD:EE:FF"); nil if it is none.
+func macBytes(s string) []byte {
+	n := monitor.NormalizeMAC(s)
+	if n == "" {
+		return nil
+	}
+	out := make([]byte, 0, 6)
+	for _, p := range strings.Split(n, ":") {
+		v, err := strconv.ParseUint(p, 16, 8)
+		if err != nil {
+			return nil
+		}
+		out = append(out, byte(v))
+	}
+	return out
 }

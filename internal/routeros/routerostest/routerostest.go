@@ -1,6 +1,6 @@
 // Package routerostest is a fake RouterOS REST API for tests. It models a
 // small switch with four copper ports, one SFP+ port, a bond, a bridge with
-// VLAN filtering and one LLDP neighbour; all values are made up.
+// VLAN filtering and one LLDP neighbour and a small bridge host table; all values are made up.
 package routerostest
 
 import (
@@ -154,8 +154,15 @@ func (s *Server) menu(path string) (any, bool) {
 		}, true
 	case "ip/neighbor":
 		return []m{
-			{"interface": "uplink,bridge1", "identity": "core-sw", "interface-name": "1/1", "system-caps-enabled": "bridge,router", "discovered-by": "lldp"},
+			{"interface": "uplink,bridge1", "identity": "core-sw", "interface-name": "1/1", "mac-address": "AA:BB:CC:00:00:01", "system-caps-enabled": "bridge,router", "discovered-by": "lldp"},
 			{"interface": "ether2,bridge1", "identity": "phone", "interface-name": "eth0", "system-caps-enabled": "telephone", "discovered-by": "lldp"},
+		}, true
+	case "interface/bridge/host":
+		return []m{
+			{"mac-address": "AA:BB:CC:00:00:01", "vid": "10", "on-interface": "uplink", "bridge": "bridge1", "local": "false", "dynamic": "true", "disabled": "false"},
+			{"mac-address": "AA:BB:CC:00:00:02", "vid": "20", "on-interface": "ether2", "bridge": "bridge1", "local": "false", "dynamic": "true", "disabled": "false"},
+			{"mac-address": "AA:BB:CC:00:00:03", "vid": "20", "on-interface": "bond1", "bridge": "bridge1", "local": "false", "dynamic": "true", "disabled": "false"},
+			{"mac-address": "AA:BB:CC:00:00:99", "vid": "10", "on-interface": "bridge1", "bridge": "bridge1", "local": "true", "dynamic": "false", "disabled": "false"},
 		}, true
 	}
 	return nil, false

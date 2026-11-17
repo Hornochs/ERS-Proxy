@@ -112,3 +112,35 @@ func front(t *testing.T, s *monitor.Snapshot, number int) *monitor.Port {
 	t.Fatalf("front-panel port %d missing", number)
 	return nil
 }
+
+// TestRouterOSWebFDB reads the bridge host table and the neighbour's MAC
+// through the REST source.
+func TestRouterOSWebFDB(t *testing.T) {
+	srv := httptest.NewServer(routerostest.New())
+	defer srv.Close()
+	c := &routeros.Client{Transport: http.DefaultTransport, Base: srv.URL, Username: routerostest.User, Password: routerostest.Password}
+	ctx := context.Background()
+	r := &routerossrc.Reader{C: c}
+	s, err := RouterOS{}.Collect(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.FDB) != 0 || !s.FDBTime.IsZero() {
+		t.Errorf("FDB collected without WithFDB: %+v", s.FDB)
+	}
+	if n := s.Port(6).Neighbor; n == nil || n.ChassisID != "aa:bb:cc:00:00:01" {
+		t.Errorf("neighbour %+v", n)
+	}
+	s, err = RouterOS{}.Collect(monitor.WithFDB(ctx), &routerossrc.Reader{C: c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []monitor.FDBEntry{
+		{MAC: "aa:bb:cc:00:00:01", VLAN: 10, IfIndex: 6},
+		{MAC: "aa:bb:cc:00:00:02", VLAN: 20, IfIndex: 3},
+		{MAC: "aa:bb:cc:00:00:03", VLAN: 20, IfIndex: 9},
+	}
+	if !reflect.DeepEqual(s.FDB, want) || s.FDBTime.IsZero() {
+		t.Errorf("FDB %+v", s.FDB)
+	}
+}

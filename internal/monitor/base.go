@@ -158,6 +158,9 @@ func CollectBase(ctx context.Context, r Reader, opts BaseOptions) (*Base, error)
 		}
 	}
 	b.lldp(ctx, r)
+	if WantFDB(ctx) {
+		b.fdb(ctx, r)
+	}
 	if !opts.SkipPoE {
 		b.poe(ctx, r, opts)
 	}
@@ -204,6 +207,31 @@ func (b *Base) lldp(ctx context.Context, r Reader) {
 	if err != nil || len(rem) == 0 {
 		return
 	}
+	// Chassis IDs and management addresses are optional (best effort).
+	chassis := map[string]string{}
+	if t, err := r.Columns(ctx, "lldpRemChassisIdSubtype", "lldpRemChassisId"); err == nil {
+		for idx, row := range t {
+			sub, _ := row["lldpRemChassisIdSubtype"].AsInt()
+			if c, ok := row["lldpRemChassisId"]; ok {
+				chassis[idx] = ChassisString(sub, c)
+			}
+		}
+	}
+	mgmt := map[string]string{}
+	if t, err := r.Columns(ctx, "lldpRemManAddrIfSubtype"); err == nil {
+		for idx := range t {
+			// timeMark.localPort.remIndex.addrSubtype(1).addrLen(4).a.b.c.d
+			parts := Ints(idx)
+			if len(parts) < 9 || parts[3] != 1 || parts[4] != 4 {
+				continue
+			}
+			key := fmt.Sprintf("%d.%d.%d", parts[0], parts[1], parts[2])
+			addr := fmt.Sprintf("%d.%d.%d.%d", parts[5], parts[6], parts[7], parts[8])
+			if old, ok := mgmt[key]; !ok || addr < old {
+				mgmt[key] = addr // lowest address: deterministic
+			}
+		}
+	}
 	byName := map[string]int{}
 	for _, p := range b.Snap.Ports {
 		for _, n := range []string{p.Name, p.Descr, p.Alias} {
@@ -245,7 +273,7 @@ func (b *Base) lldp(ctx context.Context, r Reader) {
 			continue
 		}
 		n := &Neighbor{SysName: row["lldpRemSysName"].String(), PortID: printableID(row["lldpRemPortId"]),
-			PortDesc: row["lldpRemPortDesc"].String()}
+			PortDesc: row["lldpRemPortDesc"].String(), ChassisID: chassis[idx], MgmtAddr: mgmt[idx]}
 		if c := row["lldpRemSysCapEnabled"].Bytes; len(c) > 0 && c[0]&0x20 != 0 { // bit 2 = bridge
 			n.Bridge = true
 		}

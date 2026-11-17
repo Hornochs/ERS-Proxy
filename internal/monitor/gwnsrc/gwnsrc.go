@@ -193,7 +193,7 @@ var webObjects = map[string]bool{
 	"dot1qVlanStaticEgressPorts": true, "dot1qVlanStaticUntaggedPorts": true,
 	"dot1qVlanCurrentEgressPorts": true, "dot1qVlanCurrentUntaggedPorts": true,
 	"lldpRemSysName": true, "lldpRemPortId": true, "lldpRemPortDesc": true, "lldpRemSysCapEnabled": true,
-	"lldpLocPortId": true, "lldpLocPortDesc": true,
+	"lldpLocPortId": true, "lldpLocPortDesc": true, "lldpRemChassisId": true, "lldpRemChassisIdSubtype": true,
 }
 
 func text(s string) monitor.Value { return monitor.Value{Kind: monitor.KindBytes, Bytes: []byte(s)} }
@@ -272,6 +272,13 @@ func objects(st *gwn.State) map[string]map[string]monitor.Value {
 		set("lldpRemSysName", idx, text(n.SysName))
 		set("lldpRemPortId", idx, text(n.PortID))
 		set("lldpRemPortDesc", idx, text(""))
+		if mac := monitor.NormalizeMAC(n.ChassisID); mac != "" {
+			set("lldpRemChassisIdSubtype", idx, integer(4))
+			set("lldpRemChassisId", idx, text(mac))
+		} else if n.ChassisID != "" {
+			set("lldpRemChassisIdSubtype", idx, integer(7))
+			set("lldpRemChassisId", idx, text(n.ChassisID))
+		}
 	}
 	if !st.HasVLANs {
 		return o

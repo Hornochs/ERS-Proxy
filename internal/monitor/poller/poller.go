@@ -22,6 +22,10 @@ import (
 	"github.com/lan-dot-party/ers-proxy/internal/store"
 )
 
+// fdbInterval is how often the MAC address table of a device is read. The
+// table can be large and changes slowly.
+const fdbInterval = 5 * time.Minute
+
 // Sink receives the results of every poll (history, events). Optional.
 type Sink interface {
 	// Samples is called with a snapshot that carries rates.
@@ -209,6 +213,7 @@ func (p *Poller) run(ctx context.Context, d *store.Device, now <-chan struct{}) 
 	}
 	var prev *monitor.Snapshot
 	var drv monitor.Driver
+	var fdb fdbState
 	t := time.NewTimer(0)
 	defer t.Stop()
 	for {
@@ -225,7 +230,11 @@ func (p *Poller) run(ctx context.Context, d *store.Device, now <-chan struct{}) 
 			return
 		}
 		start := time.Now()
-		snap, used, err := p.pollOnce(ctx, d, drv)
+		wantFDB := fdb.due(start)
+		if wantFDB {
+			fdb.requested = start
+		}
+		snap, used, err := p.pollOnce(ctx, d, drv, wantFDB)
 		<-g
 		if ctx.Err() != nil {
 			return
@@ -247,6 +256,7 @@ func (p *Poller) run(ctx context.Context, d *store.Device, now <-chan struct{}) 
 			p.Log.Warn("poll failed", "device", d.Name, "err", err)
 		} else {
 			drv = used
+			fdb.carry(snap)
 			monitor.Rates(prev, snap)
 			events := monitor.Diff(prev, snap)
 			if p.Sink != nil {
@@ -276,9 +286,34 @@ func (p *Poller) run(ctx context.Context, d *store.Device, now <-chan struct{}) 
 	}
 }
 
+// fdbState remembers the last address table of a device so that the latest
+// snapshot always carries the newest one.
+type fdbState struct {
+	requested time.Time
+	entries   []monitor.FDBEntry
+	time      time.Time
+}
+
+// due reports whether the next poll should read the table.
+func (f *fdbState) due(now time.Time) bool {
+	return f.requested.IsZero() || now.Sub(f.requested) >= fdbInterval
+}
+
+// carry stores the table of a snapshot that has one, and copies the stored
+// table into a snapshot that has none.
+func (f *fdbState) carry(snap *monitor.Snapshot) {
+	if !snap.FDBTime.IsZero() {
+		f.entries, f.time = snap.FDB, snap.FDBTime
+		return
+	}
+	if !f.time.IsZero() {
+		snap.FDB, snap.FDBTime = f.entries, f.time
+	}
+}
+
 // pollOnce opens a reader, picks the driver (detected once, unless fixed for
 // the device) and collects a snapshot.
-func (p *Poller) pollOnce(ctx context.Context, d *store.Device, drv monitor.Driver) (*monitor.Snapshot, monitor.Driver, error) {
+func (p *Poller) pollOnce(ctx context.Context, d *store.Device, drv monitor.Driver, wantFDB bool) (*monitor.Snapshot, monitor.Driver, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.Timeout)
 	defer cancel()
 	r, closeFn, err := p.open(ctx, d)
@@ -286,6 +321,9 @@ func (p *Poller) pollOnce(ctx context.Context, d *store.Device, drv monitor.Driv
 		return nil, nil, err
 	}
 	defer closeFn()
+	if wantFDB {
+		ctx = monitor.WithFDB(ctx)
+	}
 	return p.collect(ctx, d, r, drv)
 }
 

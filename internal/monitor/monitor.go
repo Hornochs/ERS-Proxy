@@ -112,6 +112,11 @@ type System struct {
 	ObjectID string
 	Location string
 	Uptime   time.Duration
+	// ChassisID is the LLDP chassis ID of the device (lldpLocChassisId), a MAC
+	// address in aa:bb:cc:dd:ee:ff form for most switches; BaseMAC is
+	// dot1dBaseBridgeAddress. Either may be empty.
+	ChassisID string
+	BaseMAC   string
 }
 
 // Unit is one member of a stack (or the only one).
@@ -135,6 +140,10 @@ type Neighbor struct {
 	SysName  string
 	PortID   string
 	PortDesc string
+	// ChassisID is the neighbour's chassis ID (MAC format when it is a MAC),
+	// MgmtAddr its first IPv4 management address; both may be empty.
+	ChassisID string
+	MgmtAddr  string
 	// Bridge is set when the neighbour announces bridge (switch) capability:
 	// the port is probably an uplink.
 	Bridge bool
@@ -202,6 +211,11 @@ type Snapshot struct {
 	Ports  []*Port
 	VLANs  []VLAN
 	PoE    *PoEBudget
+	// FDB is the learned MAC address table; FDBTime is when it was read (zero:
+	// not collected). The poller carries the last table over into snapshots of
+	// polls that did not read it.
+	FDB     []FDBEntry
+	FDBTime time.Time
 	// Notes lists things a driver could not determine (shown in diagnostics).
 	Notes []string
 }
@@ -302,6 +316,7 @@ func ReadSystem(ctx context.Context, r Reader) (System, error) {
 	if t, ok := v["sysUpTime"].AsUint(); ok {
 		sys.Uptime = Ticks(t)
 	}
+	readIdentity(ctx, r, &sys)
 	if sys.Name == "" && sys.Descr == "" && sys.ObjectID == "" {
 		return sys, errors.New("the device returned no system information")
 	}
@@ -324,4 +339,25 @@ func BitsMSB(b []byte) []int {
 		}
 	}
 	return out
+}
+
+// readIdentity fills ChassisID and BaseMAC. Agents without these objects are
+// fine, so errors are ignored.
+func readIdentity(ctx context.Context, r Reader, sys *System) {
+	v, err := r.Scalars(ctx, "lldpLocChassisIdSubtype", "lldpLocChassisId", "dot1dBaseBridgeAddress")
+	if err != nil {
+		return
+	}
+	sub, _ := v["lldpLocChassisIdSubtype"].AsInt()
+	if c, ok := v["lldpLocChassisId"]; ok {
+		sys.ChassisID = ChassisString(sub, c)
+	}
+	if m, ok := v["dot1dBaseBridgeAddress"]; ok {
+		if m.Kind == KindBytes {
+			sys.BaseMAC = FormatMAC(m.Bytes)
+		}
+		if sys.BaseMAC == "" {
+			sys.BaseMAC = NormalizeMAC(m.String())
+		}
+	}
 }

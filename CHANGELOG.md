@@ -26,6 +26,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Network maps (phase 10): devices on a background image (PNG, JPEG or GIF, up to 8 MiB) with
+  the links between them (LLDP, else learned MAC addresses, or drawn by hand) and their live
+  rates and utilisation. Everyone can view maps (menu "Maps"); admins create them, place devices,
+  upload the background and draw or hide links (audit `map.*`). Maps also open as workspace
+  tabs. New migration `00006_maps.sql`.
+- The body of state-changing UI requests is capped at 16 MiB.
+- MAC address table: entries with status invalid, self or mgmt, multicast and zero addresses are
+  ignored; BRIDGE-MIB is used when Q-BRIDGE reports unknown bridge ports (TP-Link JetStream);
+  without `dot1dBasePortIfIndex` the bridge port is taken as ifIndex. Rules taken from LANLeecher.
+- Groundwork for the network map (phase 10): LLDP chassis IDs (the device's own and its
+  neighbours', plus the neighbour's management address) and base bridge MAC in the snapshot;
+  collection of the learned MAC address table (FDB), at most every 5 minutes per device, also
+  from RouterOS (`interface/bridge/host`, added to the GET allow-list); and `internal/topology`,
+  which computes the links between devices from LLDP and, as a fallback, from the FDB.
 - SSH console (phase 9): admins open a terminal for a device in a workspace tab (xterm.js over
   a WebSocket; the server holds the SSH connection). Off unless `ssh.enabled: true` is set in
   `config.yaml` (`ssh.idle_timeout`, `ssh.connect_timeout`, `ssh.max_sessions`), and per

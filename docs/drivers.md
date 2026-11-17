@@ -172,7 +172,7 @@ serves the system group (`sysDescr` = "RouterOS <board> <version>" as over SNMP)
 `dot1dBasePortIfIndex` (bridge port = `ifIndex`), `dot3adAggPortAttachedAggID` (the bond's
 `ifIndex`), Q-BRIDGE (from the bridge VLAN table of bridges with VLAN filtering; the bridge
 itself is left out of the port lists, bond members are added to the bond's lists) and LLDP
-(`lldpRemSysName`, `lldpRemPortId` from `/ip/neighbor`). Tests use the fake device
+(`lldpRemSysName`, `lldpRemPortId`, `lldpRemChassisId` from `/ip/neighbor`; `dot1qTpFdbPort` from `/interface/bridge/host`). Tests use the fake device
 `internal/routeros/routerostest`.
 
 ## Rules
