@@ -255,8 +255,8 @@ on. Without it no console route exists (404). With it:
 ## Residual risks
 
 - **Tokens in URLs.** Proxy tokens appear in the reverse proxy's access log and, with "new
-  browser tab", in the browser history. They are short-lived and bound to a session; restrict
-  access to the logs.
+  browser tab", in the browser history. They are short-lived and bound to an admin's session;
+  mask them in the access log (see reverse-proxy.md) or restrict access to the logs.
 - **Legacy TLS.** TLS 1.0 with RC4 or 3DES is weak. Use a management network.
 - **Admins can do what the device account allows.** Only admins open devices: opening logs
   in with the stored device account, which usually has full rights, and ERS-Proxy does not
