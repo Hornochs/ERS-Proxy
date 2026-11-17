@@ -377,3 +377,24 @@ func TestFDBTablesOverEDM(t *testing.T) {
 		t.Errorf("ifPhysAddress %+v %v", mac, err)
 	}
 }
+
+func TestIdentityOverEDM(t *testing.T) {
+	f := newFakeVOSS()
+	f.scalars = map[string]string{"lldpLocChassisIdSubtype": "4", "lldpLocChassisId": "0x84:83:71:f7:54:00", "dot1dBaseBridgeAddress": "0x6c:fa:58:16:5c:01"}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	r := edmsrc.Reader{S: edmsrc.NewSession(&http.Transport{}, srv.URL, "u", "p")}
+	v, err := r.Scalars(context.Background(), "lldpLocChassisIdSubtype", "lldpLocChassisId", "dot1dBaseBridgeAddress")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := monitor.ChassisString(4, v["lldpLocChassisId"]); got != "84:83:71:f7:54:00" {
+		t.Errorf("chassis id %q", got)
+	}
+	if b := v["dot1dBaseBridgeAddress"]; b.Kind != monitor.KindBytes || monitor.FormatMAC(b.Bytes) != "6c:fa:58:16:5c:01" {
+		t.Errorf("base MAC %+v", b)
+	}
+	if n, ok := v["lldpLocChassisIdSubtype"].AsInt(); !ok || n != 4 {
+		t.Errorf("subtype %+v", v["lldpLocChassisIdSubtype"])
+	}
+}

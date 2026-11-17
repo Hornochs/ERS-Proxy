@@ -81,7 +81,7 @@ var kinds = map[string]monitor.Kind{
 	"ifHCInOctets": monitor.KindUint, "ifHCOutOctets": monitor.KindUint, "ifInErrors": monitor.KindUint,
 	"ifOutErrors": monitor.KindUint, "ifInDiscards": monitor.KindUint, "ifOutDiscards": monitor.KindUint,
 	"ifType": monitor.KindInt, "ifAdminStatus": monitor.KindInt, "ifOperStatus": monitor.KindInt,
-	"dot1dBasePortIfIndex": monitor.KindInt, "dot3adAggPortAttachedAggID": monitor.KindInt, "lldpLocPortIdSubtype": monitor.KindInt,
+	"dot1dBasePortIfIndex": monitor.KindInt, "dot3adAggPortAttachedAggID": monitor.KindInt, "lldpLocPortIdSubtype": monitor.KindInt, "lldpLocChassisIdSubtype": monitor.KindInt,
 	"rcVlanType": monitor.KindInt, "rcVlanStgId": monitor.KindInt, "rcVlanPortDefaultVlanId": monitor.KindInt, "rcVlanPortPerformTagging": monitor.KindInt, "rcVlanPortUntagDefaultVlan": monitor.KindInt, "rcPortOperDuplex": monitor.KindInt,
 	"rcPortOperSpeed": monitor.KindUint,
 	"dot1qTpFdbPort":  monitor.KindInt, "dot1qTpFdbStatus": monitor.KindInt, "dot1dTpFdbPort": monitor.KindInt,
@@ -96,6 +96,8 @@ var kinds = map[string]monitor.Kind{
 var binary = map[string]bool{
 	"rcVlanPortMembers": true, "rcMltPortMembers": true, "lldpRemSysCapEnabled": true,
 	"lldpRemPortId": true, "lldpLocPortId": true, "ifPhysAddress": true,
+	// The device's identity: EDM answers "0x6c:fa:…" (seen on ERS and VOSS).
+	"lldpLocChassisId": true, "dot1dBaseBridgeAddress": true,
 }
 
 // Session is the reader's view of a device's EDM session: the shared transport
