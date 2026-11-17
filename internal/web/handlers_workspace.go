@@ -91,6 +91,11 @@ func (s *Server) sidebar(r *http.Request) (*workspaceData, error) {
 	if data.Maps, err = s.DB.ListMaps(r.Context()); err != nil {
 		return nil, err
 	}
+	if !u.Can(store.RoleAdmin) {
+		// Only admins open devices (see open); users get maps and dashboards.
+		devs = nil
+		data.Count = 0
+	}
 	idx := map[string]int{}
 	for _, d := range devs {
 		sd := sidebarDevice{Device: d, Mode: s.EffectiveOpenMode(u, d), Href: "/open/" + strconv.FormatInt(d.ID, 10)}
@@ -147,6 +152,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.Audit(r, "device.open", d.Name, d.Kind)
 	if d.Direct() {
 		http.Redirect(w, r, d.URL, http.StatusSeeOther)
 		return

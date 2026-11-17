@@ -308,7 +308,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if now.Sub(time.Unix(0, ps.validated.Load())) > sessionCheckInterval {
-		if !p.app.DB.SessionExists(r.Context(), ps.loginID) {
+		if !p.app.DB.SessionAllows(r.Context(), ps.loginID, store.RoleAdmin) {
 			p.reg.remove(token)
 			isolationHeaders(w.Header(), true)
 			p.message(w, r, http.StatusUnauthorized, "You are logged out of ERS-Proxy. Log in again and reopen the device.")

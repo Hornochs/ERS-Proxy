@@ -76,7 +76,7 @@ Browser ──HTTPS──> reverse proxy ──HTTP──> ers-proxy :9050
    switch is a third party, so the browser drops its login cookie and shows no certificate
    warning. Links that cannot be framed (plain HTTP in an HTTPS portal, framing ban seen by the
    health check) fall back the same way.
-2. `/open/{id}` requires a session and refuses `Sec-Fetch-Site: cross-site`. Direct devices are
+2. `/open/{id}` requires an admin session (audited as `device.open`) and refuses `Sec-Fetch-Site: cross-site`. Direct devices are
    redirected to their URL. For proxied HTTPS devices without a pin it renders the certificate
    confirmation page (`trust.html`, frameable). Edm-direct devices are never opened through
    ERS-Proxy, so their certificate is confirmed from the edit page

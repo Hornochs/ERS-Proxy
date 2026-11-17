@@ -384,7 +384,7 @@ func (s *Server) sshConsole(ctx context.Context, ws *websocket.Conn, r *http.Req
 			switch {
 			case time.Since(time.Unix(0, last.Load())) > idle:
 				reason = "idle"
-			case !s.DB.SessionExists(ctx, sess.ID):
+			case !s.DB.SessionAllows(ctx, sess.ID, store.RoleAdmin):
 				reason = "logged out"
 			default:
 				// Keeps reverse proxies from closing a quiet console and

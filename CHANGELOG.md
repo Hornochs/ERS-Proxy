@@ -15,6 +15,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Only admins open devices. Opening logs in with the stored device account, which usually has
+  full rights on the switch, so users (role `user`) now see dashboards and maps but no device
+  list. Every open is recorded in the audit log (`device.open`), and changing a user's role
+  ends that user's sessions, including open proxy and SSH sessions.
 - MikroTik RouterOS devices now show WebFig through the proxy, embedded in the workspace like
   the other switches (verified read-only on a CRS310-8G+2S+ with RouterOS 7.25.1). Users log in
   to WebFig itself (no automatic login: WebFig encrypts its login in the browser); the stored

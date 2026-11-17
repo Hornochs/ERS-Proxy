@@ -153,7 +153,6 @@ func (s *Server) Routes() http.Handler {
 		r.Use(s.requireLogin, s.csrf)
 		r.Post("/logout", s.logout)
 		r.Get("/", s.workspace)
-		r.Get("/open/{id}", s.open)
 		r.Get("/ui/status", s.statusJSON)
 		r.Get("/dashboard", s.dashboard)
 		r.Get("/ui/monitor.json", s.monitorJSON)
@@ -170,6 +169,9 @@ func (s *Server) Routes() http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireRole(store.RoleAdmin))
+			// Opening a device logs in with its stored account, which usually
+			// has full rights on the switch: admins only.
+			r.Get("/open/{id}", s.open)
 			r.Get("/admin/devices", s.devices)
 			r.Get("/admin/devices/new", s.deviceNew)
 			r.Post("/admin/devices", s.deviceCreate)

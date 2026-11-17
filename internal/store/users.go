@@ -137,17 +137,25 @@ func (db *DB) CountAdmins(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// UpdateUser saves role and disabled state. Disabling ends all sessions.
+// UpdateUser saves role and disabled state. Disabling or changing the role
+// ends all sessions of the user (and with them proxy and SSH sessions).
 func (db *DB) UpdateUser(ctx context.Context, id int64, role string, disabled bool) error {
 	if RoleLevel(role) == 0 {
 		return errors.New("invalid role")
 	}
 	return db.InTx(ctx, func(tx *Tx) error {
+		var old string
+		if err := tx.tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ?`, id).Scan(&old); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
 		if _, err := tx.tx.ExecContext(ctx, `UPDATE users SET role = ?, disabled = ? WHERE id = ?`,
 			role, boolInt(disabled), id); err != nil {
 			return err
 		}
-		if !disabled {
+		if !disabled && old == role {
 			return nil
 		}
 		_, err := tx.tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id)
@@ -244,6 +252,15 @@ func (db *DB) SessionExists(ctx context.Context, id string) bool {
 	err := db.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.id = ? AND s.expires_at > ? AND u.disabled = 0`, id, unix(Now())).Scan(&n)
 	return err == nil && n == 1
+}
+
+// SessionAllows reports whether a session is still valid and its user still
+// has at least the given role (proxy and SSH sessions are admin-only).
+func (db *DB) SessionAllows(ctx context.Context, id, role string) bool {
+	var r string
+	err := db.sql.QueryRowContext(ctx, `SELECT u.role FROM sessions s JOIN users u ON u.id = s.user_id
+		WHERE s.id = ? AND s.expires_at > ? AND u.disabled = 0`, id, unix(Now())).Scan(&r)
+	return err == nil && RoleLevel(r) >= RoleLevel(role)
 }
 
 // ExtendSession moves the expiry of a session.
