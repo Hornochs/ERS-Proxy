@@ -211,7 +211,7 @@ func ParseAnswer(text string) error {
 	lines := strings.Split(text, "\r\n")
 	if m := owdStatus.FindStringSubmatch(text); m != nil {
 		n, _ := strconv.Atoi(strings.TrimPrefix(m[1], "+"))
-		return &SetError{Status: n, OWD: true, Message: strings.TrimSpace(text)}
+		return &SetError{Status: n, OWD: true, Message: switchcfg.TruncateText(strings.TrimSpace(text))}
 	}
 	m := snmpStatus.FindStringSubmatch(text)
 	if m == nil {
@@ -219,7 +219,7 @@ func ParseAnswer(text string) error {
 	}
 	n, err := strconv.Atoi(strings.TrimPrefix(m[1], "+"))
 	if err != nil {
-		return &SetError{Status: -1, Message: strings.TrimSpace(text)} // "|" is allowed by EDM's pattern
+		return &SetError{Status: -1, Message: switchcfg.TruncateText(strings.TrimSpace(text))} // "|" is allowed by EDM's pattern
 	}
 	if n == 0 {
 		return nil
@@ -231,7 +231,7 @@ func ParseAnswer(text string) error {
 	if len(lines) > 2 {
 		if idx, msg, ok := strings.Cut(strings.TrimSpace(lines[2]), ":"); ok {
 			if i, err := strconv.Atoi(idx); err == nil {
-				e.Index, e.Message = i, strings.TrimSpace(msg)
+				e.Index, e.Message = i, switchcfg.TruncateText(strings.TrimSpace(msg))
 			}
 		}
 	}

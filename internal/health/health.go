@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -130,6 +131,11 @@ func (c *Checker) Round(ctx context.Context) {
 		go func(d *store.Device) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					c.log.Error("health check panicked", "device_id", d.ID, "device", d.Name, "panic", r, "stack", string(debug.Stack()))
+				}
+			}()
 			st := c.check(ctx, d)
 			c.mu.Lock()
 			prev := c.status[d.ID]

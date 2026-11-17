@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -68,6 +70,11 @@ func (e *edmSessions) session(ctx context.Context, d *store.Device) (*edmsrc.Ses
 		go func(old *edmsrc.Session) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("EDM logout panicked", "device_id", d.ID, "device", d.Name, "panic", r, "stack", string(debug.Stack()))
+				}
+			}()
 			old.Logout(ctx)
 		}(ent.s)
 	}

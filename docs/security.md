@@ -32,8 +32,10 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 - Every page except `/login`, `/health` and static files requires a login.
 - Passwords: Argon2id (m=19 MiB, t=2, p=1), at least 10 characters, no default account. The
   first admin is created on the command line.
-- Login lockout per IP address and per username (5 failures in 10 minutes lock for 5 minutes),
-  one uniform error message, constant time for unknown users.
+- Login lockout per client address and username (5 failures in 10 minutes lock that pair for
+  5 minutes) and per client address across usernames (20 failures), never per username alone,
+  so nobody can lock the admin out; one uniform error message, constant time for unknown
+  users. After login only local paths are accepted as the redirect target.
 - Sessions are stored server-side as SHA-256 of the cookie value. The cookie is `HttpOnly`,
   `SameSite=Strict`, and `Secure` when `public_url` starts with `https://`. Sessions expire
   after 12 hours of inactivity; changing a password ends all sessions of the user.
@@ -59,7 +61,7 @@ option. Instead:
 2. **No portal session in the sandbox.** Requests from an opaque origin are cross-site; the
    `SameSite=Strict` session cookie is not sent. The portal additionally rejects
    `Origin: null` and requires the CSRF token.
-3. **Unguessable path.** A device is opened through `/open/{id}` (needs a session). ERS-Proxy
+3. **Unguessable path.** A device is opened through `/open/{id}` (needs an admin session). ERS-Proxy
    creates a random 128-bit token bound to the user's session and the device and redirects to
    `/d/{token}/`. The token expires after inactivity and with the session. Content of one switch
    cannot learn the token of another switch, so switches are isolated from each other as well.
@@ -254,12 +256,15 @@ on. Without it no console route exists (404). With it:
 ## Residual risks
 
 - **Tokens in URLs.** Proxy tokens appear in the reverse proxy's access log and, with "new
-  browser tab", in the browser history. They are short-lived and bound to a session; restrict
-  access to the logs.
+  browser tab", in the browser history. They are short-lived and bound to an admin's session;
+  mask them in the access log (see reverse-proxy.md) or restrict access to the logs.
 - **Legacy TLS.** TLS 1.0 with RC4 or 3DES is weak. Use a management network.
-- **Users can do what EDM allows.** ERS-Proxy does not restrict what a logged-in user does
-  inside a switch's EDM; that is decided by the switch account. SwOS has only one account with
-  full rights, so every portal user who can open a `swos` device can change that switch.
+- **Admins can do what the device account allows.** Only admins open devices: opening logs
+  in with the stored device account, which usually has full rights, and ERS-Proxy does not
+  restrict what happens inside a switch's EDM, SwOS or WebFig. Users (role `user`) see the
+  dashboards and maps but no device list and cannot open devices; every open is recorded in
+  the audit log (`device.open`). Changing a user's role or disabling the user ends their
+  sessions, and proxy and SSH sessions end with them.
 - **`isolation: off`** removes the protection against T4 for that device.
 - **SSH console** (with `ssh.enabled`): an admin account gives a CLI on every device with SSH
   turned on, with the stored logins. VSPs and ERS switches need weak SSH algorithms (`compat`);

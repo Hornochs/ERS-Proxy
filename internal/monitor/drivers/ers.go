@@ -186,6 +186,9 @@ func ersVLANs(ctx context.Context, r monitor.Reader, snap *monitor.Snapshot, unt
 		}
 	}
 	for idx, row := range vlans {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		vid := atoiIdx(idx)
 		if vid == 0 {
 			continue
@@ -241,6 +244,9 @@ func ersMLT(ctx context.Context, r monitor.Reader, snap *monitor.Snapshot) {
 		return
 	}
 	for idx, row := range t {
+		if ctx.Err() != nil {
+			return
+		}
 		id := atoiIdx(idx)
 		name := strings.TrimSpace(row["rcMltName"].String())
 		if name == "" {

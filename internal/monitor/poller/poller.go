@@ -1,5 +1,5 @@
 // Package poller runs one loop per monitored device: open a reader (SNMP,
-// EDM, SwOS, GWN or RouterOS), let the driver collect a snapshot, compute rates and events against
+// EDM, SwOS or RouterOS), let the driver collect a snapshot, compute rates and events against
 // the previous snapshot, and hand everything to the history sink.
 package poller
 
@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -62,8 +63,6 @@ type Poller struct {
 	OpenEDM OpenFunc
 	// OpenSwOS opens the SwOS web reader for source "swos" (nil: not available).
 	OpenSwOS OpenFunc
-	// OpenGWN opens the Grandstream GWN web reader for source "gwn" (nil: not available).
-	OpenGWN OpenFunc
 	// OpenRouterOS opens the RouterOS REST reader for source "routeros" (nil: not available).
 	OpenRouterOS OpenFunc
 	// Timeout of one poll (SNMP requests are retried inside).
@@ -234,48 +233,12 @@ func (p *Poller) run(ctx context.Context, d *store.Device, now <-chan struct{}) 
 		if wantFDB {
 			fdb.requested = start
 		}
-		snap, used, err := p.pollOnce(ctx, d, drv, wantFDB)
+		snap, used, err := p.pollGuarded(ctx, d, drv, wantFDB)
 		<-g
 		if ctx.Err() != nil {
 			return
 		}
-		p.mu.Lock()
-		st := p.status[d.ID]
-		if st == nil {
-			st = &Status{DeviceID: d.ID, Name: d.Name, Source: d.MonitorSource}
-			p.status[d.ID] = st
-		}
-		st.LastPoll, st.Duration = start, time.Since(start)
-		if err != nil {
-			st.Err, st.ErrAt = err.Error(), time.Now()
-		} else {
-			st.Err = ""
-		}
-		p.mu.Unlock()
-		if err != nil {
-			p.Log.Warn("poll failed", "device", d.Name, "err", err)
-		} else {
-			drv = used
-			fdb.carry(snap)
-			monitor.Rates(prev, snap)
-			events := monitor.Diff(prev, snap)
-			if p.Sink != nil {
-				if len(events) > 0 {
-					if err := p.Sink.Events(ctx, d.ID, events); err != nil {
-						p.Log.Warn("store events", "device", d.Name, "err", err)
-					}
-				}
-				if prev != nil {
-					if err := p.Sink.Samples(ctx, d.ID, snap); err != nil {
-						p.Log.Warn("store samples", "device", d.Name, "err", err)
-					}
-				}
-			}
-			prev = snap
-			p.mu.Lock()
-			st.Snap, st.Driver = snap, used.Name()
-			p.mu.Unlock()
-		}
+		p.process(ctx, d, start, snap, used, err, &prev, &drv, &fdb)
 		// A slow agent may need longer than the interval: keep a pause of at
 		// least a quarter interval instead of polling back to back.
 		next := interval - time.Since(start)
@@ -283,6 +246,68 @@ func (p *Poller) run(ctx context.Context, d *store.Device, now <-chan struct{}) 
 			next = interval / 4
 		}
 		t.Reset(next)
+	}
+}
+
+// pollGuarded runs pollOnce and turns a panic (a driver or reader bug on
+// unexpected data) into an error, so that one bad device never ends the loop
+// of other devices or the whole process.
+func (p *Poller) pollGuarded(ctx context.Context, d *store.Device, drv monitor.Driver, wantFDB bool) (snap *monitor.Snapshot, used monitor.Driver, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			p.Log.Error("poll panicked", "device_id", d.ID, "device", d.Name, "panic", r, "stack", string(debug.Stack()))
+			snap, used, err = nil, nil, fmt.Errorf("poll panicked: %v", r)
+		}
+	}()
+	return p.pollOnce(ctx, d, drv, wantFDB)
+}
+
+// process records the result of one poll: status, rates, events and history.
+// A panic in here is logged and the loop carries on with the next poll.
+func (p *Poller) process(ctx context.Context, d *store.Device, start time.Time, snap *monitor.Snapshot, used monitor.Driver, err error,
+	prevp *(*monitor.Snapshot), drvp *monitor.Driver, fdb *fdbState) {
+	defer func() {
+		if r := recover(); r != nil {
+			p.Log.Error("poll processing panicked", "device_id", d.ID, "device", d.Name, "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	prev := *prevp
+	p.mu.Lock()
+	st := p.status[d.ID]
+	if st == nil {
+		st = &Status{DeviceID: d.ID, Name: d.Name, Source: d.MonitorSource}
+		p.status[d.ID] = st
+	}
+	st.LastPoll, st.Duration = start, time.Since(start)
+	if err != nil {
+		st.Err, st.ErrAt = err.Error(), time.Now()
+	} else {
+		st.Err = ""
+	}
+	p.mu.Unlock()
+	if err != nil {
+		p.Log.Warn("poll failed", "device", d.Name, "err", err)
+	} else {
+		*drvp = used
+		fdb.carry(snap)
+		monitor.Rates(prev, snap)
+		events := monitor.Diff(prev, snap)
+		if p.Sink != nil {
+			if len(events) > 0 {
+				if err := p.Sink.Events(ctx, d.ID, events); err != nil {
+					p.Log.Warn("store events", "device", d.Name, "err", err)
+				}
+			}
+			if prev != nil {
+				if err := p.Sink.Samples(ctx, d.ID, snap); err != nil {
+					p.Log.Warn("store samples", "device", d.Name, "err", err)
+				}
+			}
+		}
+		*prevp = snap
+		p.mu.Lock()
+		st.Snap, st.Driver = snap, used.Name()
+		p.mu.Unlock()
 	}
 }
 
@@ -378,11 +403,6 @@ func (p *Poller) open(ctx context.Context, d *store.Device) (monitor.Reader, fun
 			return nil, nil, errors.New("the SwOS data source is not available")
 		}
 		return p.OpenSwOS(ctx, d)
-	case store.MonitorGWN:
-		if p.OpenGWN == nil {
-			return nil, nil, errors.New("the GWN data source is not available")
-		}
-		return p.OpenGWN(ctx, d)
 	case store.MonitorRouterOS:
 		if p.OpenRouterOS == nil {
 			return nil, nil, errors.New("the RouterOS data source is not available")

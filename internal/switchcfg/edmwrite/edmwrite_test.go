@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"unicode/utf8"
 
 	"github.com/lan-dot-party/ers-proxy/internal/edmsession"
 	"github.com/lan-dot-party/ers-proxy/internal/mockswitch"
@@ -321,4 +322,22 @@ func captureState(t *testing.T, ctx context.Context, r monitor.Reader) map[strin
 		}
 	}
 	return out
+}
+
+func TestParseAnswerTruncatesSwitchText(t *testing.T) {
+	// 3-byte runes: a cut at the limit must not split one.
+	long := strings.Repeat("€", 1000)
+	for _, text := range []string{
+		"owdErrorStatus:+5\r\n" + long,
+		"snmpErrorStatus:|5\r\n" + long,
+		"snmpErrorStatus:10\r\n\r\n2:" + long,
+	} {
+		var se *edmwrite.SetError
+		if err := edmwrite.ParseAnswer(text); !errors.As(err, &se) {
+			t.Fatalf("%.30q: %v", text, err)
+		}
+		if len(se.Message) > switchcfg.MaxErrorText || !utf8.ValidString(se.Message) || len(se.Message) < switchcfg.MaxErrorText-3 {
+			t.Errorf("%.30q: message of %d bytes (valid UTF-8: %v)", text, len(se.Message), utf8.ValidString(se.Message))
+		}
+	}
 }

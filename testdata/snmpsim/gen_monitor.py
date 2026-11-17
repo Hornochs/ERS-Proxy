@@ -6,8 +6,7 @@
 writes generic.snmprec (a Q-BRIDGE switch), ers5600.snmprec (an ERS 5600
 two-unit stack with RAPID-CITY VLANs and no Q-BRIDGE), cisco.snmprec (VTP) and
 tplink.snmprec (Q-BRIDGE), voss.snmprec (VSP 4850GTS on VOSS 7.1) and
-swos.snmprec (MikroTik CRS305 on SwOS 2.18),
-grandstream.snmprec (Grandstream GWN7721) and
+swos.snmprec (MikroTik CRS305 on SwOS 2.18) and
 routeros.snmprec (MikroTik CRS310 on RouterOS 7.25). All values are made up;
 only the OIDs are real. The community of each agent is its file name.
 
@@ -396,33 +395,6 @@ def swos():
     a.write("swos.snmprec")
 
 
-def grandstream():
-    """Grandstream GWN7721 (firmware 1.0.7) as seen on real hardware:
-    sysObjectID is the bare enterprise OID, IF-MIB with 64-bit counters
-    (ifName "2.5GE1" ... "SFP+10"), BRIDGE-MIB, from Q-BRIDGE only the scalars
-    and dot1qPvid, and Grandstream's model and firmware scalars. No EtherLike,
-    LAG, LLDP, PoE or VLAN table."""
-    a = Agent()
-    system(a, "GWN7721", "1.3.6.1.4.1.42397", "gwn-lab")
-    gs = "1.3.6.1.4.1.42397.1.3.1"
-    a.s(f"{gs}.1.0", "GWN7721")
-    a.s(f"{gs}.2.0", "gwn-lab")
-    a.s(f"{gs}.4.0", "1.0.7.1")
-    # (ifIndex, name, link up, Mbit/s, alias, admin up, PVID)
-    ports = [(1, "2.5GE1", True, 2500, "office", True, 1), (2, "2.5GE2", True, 1000, "camera", True, 100),
-             (3, "2.5GE3", False, 2500, "", False, 1), (4, "2.5GE4", False, 2500, "", True, 1),
-             (9, "SFP+9", True, 10000, "uplink", True, 1), (10, "SFP+10", False, 0, "", True, 1)]
-    for idx, name, up, mbps, alias, admin_up, pvid in ports:
-        interface(a, idx, name, name, 6, up, mbps, alias=alias, admin_up=admin_up,
-                  in_octets=idx * 1000000, out_octets=idx * 3000000)
-        a.i(f"1.3.6.1.2.1.17.1.4.1.2.{idx}", idx)
-        a.i(f"1.3.6.1.2.1.17.7.1.4.5.1.1.{idx}", pvid, 66)
-    a.i("1.3.6.1.2.1.17.7.1.1.1.0", 1)  # dot1qVlanVersionNumber
-    a.i("1.3.6.1.2.1.17.7.1.1.2.0", 4094)  # dot1qMaxVlanId
-    a.i("1.3.6.1.2.1.17.7.1.1.4.0", 2, 66)  # dot1qNumVlans
-    a.write("grandstream.snmprec")
-
-
 def routeros():
     """MikroTik CRS310-8G+2S+ on RouterOS 7.25 as seen on real hardware:
     sysObjectID .14988.1, sysDescr "RouterOS <board> <version>", ifIndex =
@@ -486,7 +458,6 @@ if __name__ == "__main__":
     tplink_qbridge()
     voss()
     swos()
-    grandstream()
     routeros()
     demo("ers5600.snmprec", "demo-ers5600.snmprec")
     demo("generic.snmprec", "demo-generic.snmprec")

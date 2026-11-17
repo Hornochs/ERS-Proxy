@@ -53,9 +53,15 @@ type StatusSource interface {
 // Server is the web UI.
 type Server struct {
 	*app.App
-	pages  map[string]*template.Template
-	login  *auth.LoginLimiter
-	reauth *auth.LoginLimiter
+	pages map[string]*template.Template
+	// login locks (client IP, username) pairs; loginIP locks a client IP that
+	// tries many usernames. Neither locks a username for everyone, so nobody
+	// can lock the admin out.
+	login   *auth.LoginLimiter
+	loginIP *auth.LoginLimiter
+	reauth  *auth.LoginLimiter
+	// probeCache keeps certificate probes for the trust page.
+	probeCache probeCache
 	// Opener handles ers-edm devices; without it they cannot be opened.
 	Opener Opener
 	// Health provides status dots; optional.
@@ -94,7 +100,7 @@ var pageFiles = []string{
 
 // New parses all templates.
 func New(a *app.App) (*Server, error) {
-	s := &Server{App: a, pages: map[string]*template.Template{}, login: auth.NewLoginLimiter(), reauth: auth.NewLoginLimiter()}
+	s := &Server{App: a, pages: map[string]*template.Template{}, login: auth.NewLoginLimiter(), loginIP: newIPLoginLimiter(), reauth: auth.NewLoginLimiter()}
 	for _, name := range pageFiles {
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}
 		if name == "device_bulk" {
@@ -116,16 +122,16 @@ var funcs = template.FuncMap{
 	"hasPrefix": strings.HasPrefix,
 	"openModes": func() []string { return []string{config.OpenEmbedded, config.OpenTab, config.OpenWindow} },
 	"deviceKinds": func() []string {
-		return []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindSwOS, store.KindGWN, store.KindRouterOS, store.KindLink}
+		return []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindSwOS, store.KindRouterOS, store.KindLink}
 	},
 	"sshSupported":    devices.SSHSupported,
 	"sshDefaultLogin": devices.DefaultSSHLogin,
 	"tlsModes":        func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
 	"monitorSources": func() []string {
-		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN, store.MonitorRouterOS}
+		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorRouterOS}
 	},
 	"monitorDrivers": func() []string {
-		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS, store.DriverGWN, store.DriverRouterOS}
+		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS, store.DriverRouterOS}
 	},
 	"snmpVersions":   func() []string { return snmp.Versions },
 	"securityLevels": func() []string { return snmp.SecurityLevels },
@@ -153,7 +159,6 @@ func (s *Server) Routes() http.Handler {
 		r.Use(s.requireLogin, s.csrf)
 		r.Post("/logout", s.logout)
 		r.Get("/", s.workspace)
-		r.Get("/open/{id}", s.open)
 		r.Get("/ui/status", s.statusJSON)
 		r.Get("/dashboard", s.dashboard)
 		r.Get("/ui/monitor.json", s.monitorJSON)
@@ -170,6 +175,9 @@ func (s *Server) Routes() http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireRole(store.RoleAdmin))
+			// Opening a device logs in with its stored account, which usually
+			// has full rights on the switch: admins only.
+			r.Get("/open/{id}", s.open)
 			r.Get("/admin/devices", s.devices)
 			r.Get("/admin/devices/new", s.deviceNew)
 			r.Post("/admin/devices", s.deviceCreate)
@@ -234,6 +242,7 @@ func frameable(w http.ResponseWriter) {
 }
 
 func (s *Server) deviceChanged(id int64) {
+	s.probeCache.forget(id)
 	if s.OnDeviceChange != nil {
 		s.OnDeviceChange(id)
 	}

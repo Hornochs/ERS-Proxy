@@ -12,9 +12,50 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gosnmp 1.47, goose 3.29, modernc sqlite 1.60, `golang.org/x/*`). `govulncheck` reported about
   47 reachable standard-library vulnerabilities (`net/http`, `crypto/x509`) for the old
   toolchain and reports none now.
+- A panic while polling one device, in the configuration revert loop, in the history maintenance
+  or in a health check is now logged with a stack trace instead of ending the process; the
+  other devices keep being polled.
+- Upper bounds for data from SNMP agents: a walk stops after 20000 rows, a device shows at most
+  2048 interfaces (ifIndex 1 to 65535), port bit lists longer than 1024 bytes are cut, and the
+  history recorder no longer keeps counters of ports that are gone.
+- The CSV device export protects cells that start with `=`, `+`, `-`, `@`, a tab or a carriage
+  return against formula injection in spreadsheets (a single quote is put in front; the CSV
+  import removes it again, so export and import round-trip).
+- Device import files larger than 4 MiB are refused with an error instead of being cut off and
+  imported partially (CSV, JSON, web form and `ers-proxy device import`).
+- Error texts that a switch sends back for a configuration write are cut to 1024 bytes before
+  they are stored in the change history and the audit log.
+- CI installs fixed versions of the SNMP simulator (`snmpsim` 1.2.2, `pysmi` 2.0.0).
+
+### Removed
+
+- Grandstream GWN support (device kind `gwn`, data source `gwn`, driver `grandstream`): the
+  maintainer no longer has the hardware. A migration turns existing `gwn` devices into `link`
+  devices, which keep opening directly; their `gwn` data source and `grandstream` driver
+  settings are reset.
 
 ### Changed
 
+- Login lockout: 5 failures lock the pair of client address and username, 20 failures lock a
+  client address that tries many usernames; a username is no longer locked for everyone, so
+  nobody can lock the admin out. Behind a reverse proxy the client address comes from
+  `X-Forwarded-For` read right to left (trusted proxies skipped), `X-Real-IP` is only a
+  fallback, and a warning is logged when proxy headers arrive from an address that is not in
+  `trusted_proxies`.
+- The page after login accepts only local paths (control characters and backslashes are
+  refused).
+- Redirects from a device to another host (also scheme-relative `//host/…`) now stay on the
+  device instead of leaving the portal, and proxy error pages no longer show the device's
+  address or connection details (they are in the diagnostics and the log).
+- The certificate check before opening an unconfirmed HTTPS device runs at most once a minute
+  per device instead of on every page load (old switches handle the five test handshakes
+  slowly).
+- Device import never takes `isolation: off` or a certificate pin from the file: such devices
+  get the sandbox and need their certificate confirmed again; the import result lists them.
+- Only admins open devices. Opening logs in with the stored device account, which usually has
+  full rights on the switch, so users (role `user`) now see dashboards and maps but no device
+  list. Every open is recorded in the audit log (`device.open`), and changing a user's role
+  ends that user's sessions, including open proxy and SSH sessions.
 - MikroTik RouterOS devices now show WebFig through the proxy, embedded in the workspace like
   the other switches (verified read-only on a CRS310-8G+2S+ with RouterOS 7.25.1). Users log in
   to WebFig itself (no automatic login: WebFig encrypts its login in the browser); the stored

@@ -27,7 +27,7 @@
       </ul>
     </details>
     {{else}}
-    <p class="muted small sidebar-empty">{{.T "ws.no_devices"}}</p>
+    <p class="muted small sidebar-empty">{{if .Can "admin"}}{{.T "ws.no_devices"}}{{else}}{{.T "ws.admins_open"}}{{end}}</p>
     {{end}}
     {{if .Data.Maps}}
     <details class="group" open>
@@ -50,7 +50,8 @@
         {{if .Data.Count}}<p class="muted">{{.T "ws.hint"}}</p>
         {{else if .Can "admin"}}<p class="muted">{{.T "ws.first_device"}}</p>
           <p><a class="button primary" href="/admin/devices/new">{{.T "devices.new"}}</a></p>
-        {{else}}<p class="muted">{{.T "ws.ask_admin"}}</p>{{end}}
+        {{else}}<p class="muted">{{.T "ws.user_hint"}}</p>
+          <p><a class="button" href="/dashboard">{{.T "nav.dashboard"}}</a> <a class="button" href="/maps">{{.T "nav.maps"}}</a></p>{{end}}
       </div>
     </div>
   </section>

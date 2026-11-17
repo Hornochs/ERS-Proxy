@@ -8,9 +8,13 @@ Three things matter:
 1. `public_url` in `config.yaml` is exactly what the browser shows, e.g.
    `https://ers.example.org`. ERS-Proxy compares the `Origin` header of every form submission
    with it and rejects anything else.
-2. The proxy passes the `Host` header through and sets `X-Real-IP` / `X-Forwarded-For`; list
-   the proxy's address in `trusted_proxies` so that login lockouts and the audit log see the
-   real client address.
+2. The proxy passes the `Host` header through and appends the client to `X-Forwarded-For`
+   (nginx: `$proxy_add_x_forwarded_for`; Caddy and Traefik do it by default); list the proxy's
+   address in `trusted_proxies` so that login lockouts and the audit log see the real client
+   address. ERS-Proxy reads `X-Forwarded-For` from the right and skips trusted proxies, so
+   entries a client sends itself are ignored; `X-Real-IP` is only a fallback. Without that
+   entry every client looks like the proxy, and ERS-Proxy logs a warning on the first such
+   request.
 3. Responses must not be buffered for too long and request bodies of a few MB must be allowed
    (device import). EDM itself sends small requests.
 
@@ -63,9 +67,22 @@ server {
 }
 ```
 
-Proxy tokens appear in request paths (`/d/<token>/…`). They are short-lived and bound to a
-login session; still, consider shortening access-log retention or logging `$uri` without the
-token for `/d/` locations.
+Proxy tokens appear in request paths (`/d/<token>/…`). They are short-lived, bound to an
+admin's login session and end with it, but while valid the token is the only credential for
+that device session. Keep them out of the access log with a masking `map` (in the `http`
+block) and a log format that uses it:
+
+```nginx
+map $request_uri $ersp_uri {
+    "~^/d/[0-9a-f]{32}(?<rest>/.*)?$"  /d/<token>$rest;
+    default                            $request_uri;
+}
+log_format ersp '$remote_addr - $remote_user [$time_local] "$request_method $ersp_uri $server_protocol" '
+                '$status $body_bytes_sent "$http_user_agent"';
+```
+
+and `access_log /var/log/nginx/ers-proxy.access.log ersp;` in the `server` block. The
+`Referer` is left out on purpose: it can carry a token as well.
 
 The SSH console (`ssh.enabled`) uses a WebSocket below `/ssh/<id>/ws`. Without the second
 `location` Nginx answers the upgrade with `426 Upgrade Required` and the console shows

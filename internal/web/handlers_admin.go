@@ -513,7 +513,10 @@ func (s *Server) deviceExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deviceImport(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(4 << 20); err != nil {
+	// The CSRF middleware has usually parsed the form already (within the
+	// global request body cap); the cap below covers the case that it has not.
+	r.Body = http.MaxBytesReader(w, r.Body, devices.MaxImportBytes+(1<<20))
+	if err := r.ParseMultipartForm(devices.MaxImportBytes); err != nil {
 		redirect(w, r, "/admin/devices?err=import_failed")
 		return
 	}
@@ -523,7 +526,9 @@ func (s *Server) deviceImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, 4<<20))
+	// One byte more than allowed: the readers report a file that is too large
+	// instead of silently importing a truncated one.
+	data, err := io.ReadAll(io.LimitReader(f, devices.MaxImportBytes+1))
 	if err != nil {
 		redirect(w, r, "/admin/devices?err=import_failed")
 		return

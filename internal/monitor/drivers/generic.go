@@ -12,7 +12,7 @@ import (
 
 // All returns every driver, for monitor.NewRegistry.
 func All() []monitor.Driver {
-	return []monitor.Driver{Generic{}, ERS{}, Cisco{}, TPLink{}, VOSS{}, SwOS{}, Grandstream{}, RouterOS{}}
+	return []monitor.Driver{Generic{}, ERS{}, Cisco{}, TPLink{}, VOSS{}, SwOS{}, RouterOS{}}
 }
 
 // Generic covers switches with the standard Q-BRIDGE-MIB.
@@ -91,6 +91,9 @@ func QBridge(ctx context.Context, r monitor.Reader, b *monitor.Base) error {
 		ids[id] = true
 	}
 	for vid, m := range members {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		ids[vid] = true
 		untagged := map[int]bool{}
 		for _, bit := range monitor.BitsMSB(m[1]) {

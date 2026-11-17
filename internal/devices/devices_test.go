@@ -335,8 +335,17 @@ func TestEDMDirectExportImport(t *testing.T) {
 	src := open()
 	in := &Export{Version: ExportVersion, Devices: []ExportDevice{{Name: "vsp", Kind: store.KindEDMDirect, URL: "https://vsp.example",
 		Isolation: store.IsolationOff, TLSMode: store.TLSLegacy, TLSPin: pin}}}
-	if res, err := Import(ctx, src, in); err != nil || res.Created != 1 {
+	res, err := Import(ctx, src, in)
+	if err != nil || res.Created != 1 || len(res.Reset) != 1 {
 		t.Fatalf("import: %+v %v", res, err)
+	}
+	// The pin is never taken from a file: an admin confirms the certificate.
+	devs, _ := src.ListDevices(ctx)
+	if devs[0].TLSPin != "" {
+		t.Fatal("pin imported from a file")
+	}
+	if err := src.SetDeviceTLS(ctx, devs[0].ID, pin, store.TLSLegacy); err != nil {
+		t.Fatal(err)
 	}
 	out, err := Build(ctx, src)
 	if err != nil {
@@ -361,9 +370,9 @@ func TestEDMDirectExportImport(t *testing.T) {
 	if res, err := Import(ctx, dst, back); err != nil || res.Created != 1 {
 		t.Fatalf("re-import: %+v %v", res, err)
 	}
-	devs, _ := dst.ListDevices(ctx)
+	devs, _ = dst.ListDevices(ctx)
 	d := devs[0]
-	if d.Kind != store.KindEDMDirect || d.TLSMode != store.TLSLegacy || d.TLSPin != pin || d.Isolation != store.IsolationSandbox {
+	if d.Kind != store.KindEDMDirect || d.TLSMode != store.TLSLegacy || d.TLSPin != "" || d.Isolation != store.IsolationSandbox {
 		t.Fatalf("round trip: %+v", d)
 	}
 }
@@ -496,7 +505,7 @@ func TestNormalizeRouterOS(t *testing.T) {
 	if d.Isolation != store.IsolationOff || d.AutoLogin {
 		t.Errorf("isolation %q auto-login %v", d.Isolation, d.AutoLogin)
 	}
-	if !d.Proxied() || !d.Upstream() || d.Direct() || d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() || d.GWN() ||
+	if !d.Proxied() || !d.Upstream() || d.Direct() || d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() ||
 		!d.WebApp() || !d.Rebase() {
 		t.Fatal("kind helpers for routeros")
 	}
@@ -505,13 +514,13 @@ func TestNormalizeRouterOS(t *testing.T) {
 		t.Fatal("kind helpers for swos")
 	}
 	var fe *FieldError
-	for _, kind := range []string{store.KindERS, store.KindSwOS, store.KindGWN, store.KindEDMDirect, store.KindLink} {
+	for _, kind := range []string{store.KindERS, store.KindSwOS, store.KindEDMDirect, store.KindLink} {
 		x := &store.Device{Name: "x", Kind: kind, URL: "http://192.0.2.41/", MonitorSource: store.MonitorRouterOS}
 		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
 			t.Errorf("routeros source on %s: %v", kind, err)
 		}
 	}
-	for _, src := range []string{store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN} {
+	for _, src := range []string{store.MonitorEDM, store.MonitorSwOS} {
 		x := &store.Device{Name: "x", Kind: store.KindRouterOS, URL: "192.0.2.40", MonitorSource: src}
 		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
 			t.Errorf("%s source on routeros: %v", src, err)
@@ -520,5 +529,87 @@ func TestNormalizeRouterOS(t *testing.T) {
 	x := &store.Device{Name: "x", Kind: store.KindRouterOS, URL: "192.0.2.40", MonitorSource: store.MonitorSNMP}
 	if err := Normalize(x); err != nil {
 		t.Errorf("snmp source on routeros: %v", err)
+	}
+}
+
+func TestCSVFormulaEscapeRoundTrip(t *testing.T) {
+	names := []string{"=1+1", "+cmd", "-5", "@SUM(A1)", "\t=x", "'=quoted", "''-x", "plain", "'plain", "a=b", "x-y"}
+	in := &Export{Version: ExportVersion}
+	for _, n := range names {
+		in.Devices = append(in.Devices, ExportDevice{Name: n, Kind: store.KindLink, URL: "https://x.example/", Notes: n})
+	}
+	var buf bytes.Buffer
+	if err := WriteCSV(&buf, in); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(buf.String(), "\n")[1:] {
+		if line == "" {
+			continue
+		}
+		if c := line[0]; c == '=' || c == '+' || c == '-' || c == '@' || c == '\t' || c == '\r' {
+			t.Errorf("unprotected cell in %q", line)
+		}
+	}
+	if !strings.Contains(buf.String(), "'=1+1,") || !strings.Contains(buf.String(), "'-5,") {
+		t.Errorf("missing quote prefix:\n%s", buf.String())
+	}
+	out, err := ReadCSV(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Devices) != len(names) {
+		t.Fatalf("%d devices", len(out.Devices))
+	}
+	for i, n := range names {
+		if got := out.Devices[i]; got.Name != n || got.Notes != n {
+			t.Errorf("%q came back as name %q notes %q", n, got.Name, got.Notes)
+		}
+	}
+}
+
+func TestReadLimits(t *testing.T) {
+	big := "name,url\n" + strings.Repeat("a", MaxImportBytes)
+	if _, err := ReadCSV(strings.NewReader(big)); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("oversized CSV: %v", err)
+	}
+	if _, err := ReadJSON(strings.NewReader(`{"version":1,"x":"` + strings.Repeat("a", MaxImportBytes) + `"}`)); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("oversized JSON: %v", err)
+	}
+	ok := "name,url\n" + strings.Repeat("a", MaxImportBytes-len("name,url\n"))
+	if _, err := ReadCSV(strings.NewReader(ok)); err != nil {
+		t.Fatalf("file of exactly the limit: %v", err)
+	}
+}
+
+func TestImportNeverWeakensSecurity(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.Open(store.Options{Path: filepath.Join(t.TempDir(), "t.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
+	}
+	pin := strings.Repeat("ab", 32)
+	e := &Export{Devices: []ExportDevice{
+		{Name: "Risky", Kind: store.KindERS, URL: "https://192.0.2.5", Isolation: store.IsolationOff, TLSPin: pin},
+		{Name: "Normal", Kind: store.KindERS, URL: "http://192.0.2.6"},
+	}}
+	res, err := Import(ctx, db, e)
+	if err != nil || res.Created != 2 {
+		t.Fatalf("import: %+v %v", res, err)
+	}
+	if len(res.Reset) != 1 || !strings.Contains(res.Reset[0], "Risky") {
+		t.Errorf("reset notes = %v", res.Reset)
+	}
+	devs, err := db.ListDevices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range devs {
+		if d.Isolation == store.IsolationOff || d.TLSPin != "" {
+			t.Errorf("%s imported with isolation %q pin %q", d.Name, d.Isolation, d.TLSPin)
+		}
 	}
 }

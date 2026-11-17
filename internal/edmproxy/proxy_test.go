@@ -292,7 +292,11 @@ func TestRewriteLocation(t *testing.T) {
 		"http://192.0.2.10/login.html":    "/d/t/login.html",
 		"http://192.0.2.10:80/login.html": "/d/t/login.html",
 		"login.html":                      "login.html",
-		"https://example.org/x":           "https://example.org/x",
+		"https://example.org/x":           "/d/t/",
+		"//example.org/x":                 "/d/t/",
+		"//192.0.2.10/x?y=1":              "/d/t/x?y=1",
+		"javascript:alert(1)":             "/d/t/",
+		"HTTP://192.0.2.10/a":             "/d/t/a",
 	}
 	for in, want := range cases {
 		if got := rewriteLocation(in, target, "/d/t/"); got != want {

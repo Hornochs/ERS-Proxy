@@ -189,3 +189,37 @@ func TestResolutionAndSeries(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func TestPrevStaysBounded(t *testing.T) {
+	ctx := context.Background()
+	r, _, dev := setup(t, defaults())
+	t0 := time.Date(2026, 3, 1, 12, 0, 20, 0, time.UTC)
+	var ports []*monitor.Port
+	for i := 1; i <= 5; i++ {
+		ports = append(ports, &monitor.Port{IfIndex: i, Physical: true})
+	}
+	if err := r.Samples(ctx, dev, snap(t0, ports...)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.prev) != 5 {
+		t.Fatalf("prev has %d entries", len(r.prev))
+	}
+	// Ports that disappeared are forgotten; other devices are left alone.
+	r.prev[portKey{device: dev + 1, ifIndex: 1}] = errCounters{}
+	if err := r.Samples(ctx, dev, snap(t0.Add(time.Minute), ports[:2]...)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.prev) != 3 {
+		t.Fatalf("prev has %d entries, want 2 + 1 of another device", len(r.prev))
+	}
+	// The safety valve empties a map that grew beyond reason.
+	for i := 0; i <= maxPrev; i++ {
+		r.prev[portKey{device: dev + 2, ifIndex: i}] = errCounters{}
+	}
+	if err := r.Samples(ctx, dev, snap(t0.Add(2*time.Minute), ports[:2]...)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.prev) != 0 {
+		t.Fatalf("prev has %d entries after the safety valve", len(r.prev))
+	}
+}

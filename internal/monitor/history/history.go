@@ -5,6 +5,7 @@ package history
 import (
 	"context"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -30,6 +31,9 @@ type portKey struct {
 	device  int64
 	ifIndex int
 }
+
+// maxPrev is the most remembered error counters: 2048 ports for 64 devices.
+const maxPrev = 64 * 2048
 
 type errCounters struct{ in, out uint64 }
 
@@ -58,11 +62,13 @@ func (r *Recorder) Samples(ctx context.Context, deviceID int64, snap *monitor.Sn
 	ts := snap.Time.UTC().Truncate(time.Minute)
 	var out []store.Sample
 	r.mu.Lock()
+	seen := map[portKey]bool{}
 	for _, p := range snap.Ports {
 		if !p.Physical && !p.IsLAG {
 			continue
 		}
 		k := portKey{deviceID, p.IfIndex}
+		seen[k] = true
 		var inD, outD int64
 		if prev, ok := r.prev[k]; ok {
 			if p.InErrors >= prev.in {
@@ -83,6 +89,17 @@ func (r *Recorder) Samples(ctx context.Context, deviceID int64, snap *monitor.Sn
 			UtilMax: p.Utilization, InErrors: inD, OutErrors: outD, UpFrac: up, N: 1,
 		})
 	}
+	// Bound prev by the ports actually present: forget the ports of this device
+	// that are gone, and start over should the map still grow beyond reason
+	// (devices removed from monitoring are never reported again).
+	for k := range r.prev {
+		if k.device == deviceID && !seen[k] {
+			delete(r.prev, k)
+		}
+	}
+	if len(r.prev) > maxPrev {
+		r.prev = map[portKey]errCounters{}
+	}
 	r.mu.Unlock()
 	return r.db.UpsertSamples(ctx, out)
 }
@@ -98,7 +115,7 @@ func (r *Recorder) Events(ctx context.Context, deviceID int64, events []monitor.
 
 // Run does the maintenance once and then every five minutes until ctx ends.
 func (r *Recorder) Run(ctx context.Context) {
-	r.Maintain(ctx)
+	r.maintainGuarded(ctx)
 	t := time.NewTicker(MaintenanceInterval)
 	defer t.Stop()
 	for {
@@ -106,9 +123,20 @@ func (r *Recorder) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			r.Maintain(ctx)
+			r.maintainGuarded(ctx)
 		}
 	}
+}
+
+// maintainGuarded runs Maintain and logs a panic with its stack instead of
+// letting it end the process.
+func (r *Recorder) maintainGuarded(ctx context.Context) {
+	defer func() {
+		if p := recover(); p != nil {
+			r.log.Error("history maintenance panicked", "panic", p, "stack", string(debug.Stack()))
+		}
+	}()
+	r.Maintain(ctx)
 }
 
 // Maintain rolls samples up and deletes rows past their retention.

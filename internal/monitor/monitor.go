@@ -326,10 +326,19 @@ func ReadSystem(ctx context.Context, r Reader) (System, error) {
 // Ticks converts TimeTicks (1/100 s).
 func Ticks(t uint64) time.Duration { return time.Duration(t) * 10 * time.Millisecond }
 
+// MaxBitsOctets is the longest bit string BitsMSB reads (8192 bits).
+const MaxBitsOctets = 1024
+
 // BitsMSB returns the positions of all set bits, counting from the most
 // significant bit of the first octet as 0. Both Q-BRIDGE PortList (position+1
-// = bridge port) and ERS PortSet (position = ifIndex) use this order.
+// = bridge port) and ERS PortSet (position = ifIndex) use this order. Only
+// the first MaxBitsOctets octets are looked at: a longer value comes from a
+// broken or hostile agent, and bounds the work of the loops that walk the
+// result.
 func BitsMSB(b []byte) []int {
+	if len(b) > MaxBitsOctets {
+		b = b[:MaxBitsOctets]
+	}
 	var out []int
 	for i, octet := range b {
 		for j := 7; j >= 0; j-- {

@@ -213,3 +213,32 @@ func TestCreateDevices(t *testing.T) {
 		t.Fatalf("%d devices after rollback, want 2", len(all))
 	}
 }
+
+func TestRoleChangeEndsSessions(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+	u := &User{Username: "eve", PasswordHash: "x", Role: RoleAdmin}
+	if err := db.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateSession(ctx, &Session{ID: "s1", UserID: u.ID, ExpiresAt: Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if !db.SessionAllows(ctx, "s1", RoleAdmin) {
+		t.Fatal("admin session not allowed")
+	}
+	// Same role, enabled: session stays.
+	if err := db.UpdateUser(ctx, u.ID, RoleAdmin, false); err != nil {
+		t.Fatal(err)
+	}
+	if !db.SessionExists(ctx, "s1") {
+		t.Fatal("unchanged user lost the session")
+	}
+	// Demoted: session ends, so proxy and SSH sessions end with it.
+	if err := db.UpdateUser(ctx, u.ID, RoleUser, false); err != nil {
+		t.Fatal(err)
+	}
+	if db.SessionExists(ctx, "s1") || db.SessionAllows(ctx, "s1", RoleUser) {
+		t.Fatal("demoted user kept the session")
+	}
+}

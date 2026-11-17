@@ -21,7 +21,7 @@ import (
 func init() {
 	deviceAddCmd.Flags().String("name", "", "display name (required)")
 	deviceAddCmd.Flags().String("url", "", "address, e.g. https://192.0.2.10 (required)")
-	deviceAddCmd.Flags().String("kind", store.KindERS, "ers-edm (ERS, EDM through the proxy), vsp-edm (VSP/VOSS, EDM through the proxy), edm-direct (VSP/VOSS, EDM opened directly), swos (MikroTik SwOS through the proxy), gwn (Grandstream GWN, opened directly), routeros (MikroTik RouterOS, WebFig through the proxy) or link (other device)")
+	deviceAddCmd.Flags().String("kind", store.KindERS, "ers-edm (ERS, EDM through the proxy), vsp-edm (VSP/VOSS, EDM through the proxy), edm-direct (VSP/VOSS, EDM opened directly), swos (MikroTik SwOS through the proxy), routeros (MikroTik RouterOS, WebFig through the proxy) or link (other device)")
 	deviceAddCmd.Flags().String("group", "", "group name (created if missing)")
 	deviceAddCmd.Flags().String("open-mode", store.OpenInherit, "inherit, embedded, tab or window")
 	deviceAddCmd.Flags().String("notes", "", "optional notes")
@@ -139,6 +139,9 @@ var deviceImportCmd = &cobra.Command{
 		e.audit(cmd.Context(), store.AuditEntry{Actor: "cli", Action: "device.import", Target: args[0],
 			Details: fmt.Sprintf("created=%d skipped=%d errors=%d", res.Created, res.Skipped, len(res.Errors))})
 		fmt.Printf("%d created, %d already present, %d invalid, %d new groups\n", res.Created, res.Skipped, len(res.Errors), res.GroupsCreated)
+		for _, msg := range res.Reset {
+			fmt.Println("security settings not imported:", msg)
+		}
 		return nil
 	},
 }

@@ -41,7 +41,7 @@ func Capture(ctx context.Context, t snmp.Target, w io.Writer, anonymize bool) (n
 			return 0, skipped, err
 		}
 		base := monitor.Objects[name]
-		pdus, err := g.BulkWalkAll("." + base)
+		pdus, err := snmp.BulkWalkLimited(g, "."+base)
 		if err != nil {
 			skipped = append(skipped, fmt.Sprintf("%s: %v", name, err))
 			continue

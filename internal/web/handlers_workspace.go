@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -91,6 +93,11 @@ func (s *Server) sidebar(r *http.Request) (*workspaceData, error) {
 	if data.Maps, err = s.DB.ListMaps(r.Context()); err != nil {
 		return nil, err
 	}
+	if !u.Can(store.RoleAdmin) {
+		// Only admins open devices (see open); users get maps and dashboards.
+		devs = nil
+		data.Count = 0
+	}
 	idx := map[string]int{}
 	for _, d := range devs {
 		sd := sidebarDevice{Device: d, Mode: s.EffectiveOpenMode(u, d), Href: "/open/" + strconv.FormatInt(d.ID, 10)}
@@ -147,6 +154,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.Audit(r, "device.open", d.Name, d.Kind)
 	if d.Direct() {
 		http.Redirect(w, r, d.URL, http.StatusSeeOther)
 		return
@@ -194,7 +202,7 @@ func (s *Server) showTrust(w http.ResponseWriter, r *http.Request, d *store.Devi
 			return upstream.Probe(ctx, net.JoinHostPort(host, port), host, s.Cfg.Health.Timeout)
 		}
 	}
-	res := probe(r.Context(), d)
+	res := s.probeCache.get(d.ID, d.URL, func() *upstream.ProbeResult { return probe(r.Context(), d) })
 	p := s.page(r, "trust.title", "", trustData{Device: d, Probe: res, Back: back})
 	s.render(w, r, "trust", p)
 }
@@ -241,4 +249,51 @@ func (s *Server) UpdateFrameSources(ctx context.Context) {
 		}
 	}
 	s.SetFrameSources(origins)
+}
+
+// probeTTL is how long a certificate probe result is reused: a probe makes up
+// to five TLS handshakes, which old switches handle slowly, and reloading the
+// trust page should not repeat them.
+const probeTTL = time.Minute
+
+// probeCache keeps the last probe result per device (and URL), and lets only
+// one probe per device run at a time.
+type probeCache struct {
+	mu      sync.Mutex
+	entries map[int64]*probeEntry
+}
+
+type probeEntry struct {
+	mu  sync.Mutex
+	url string
+	at  time.Time
+	res *upstream.ProbeResult
+}
+
+func (c *probeCache) get(id int64, url string, probe func() *upstream.ProbeResult) *upstream.ProbeResult {
+	c.mu.Lock()
+	if c.entries == nil {
+		c.entries = map[int64]*probeEntry{}
+	}
+	e := c.entries[id]
+	if e == nil {
+		e = &probeEntry{}
+		c.entries[id] = e
+	}
+	c.mu.Unlock()
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.res != nil && e.url == url && time.Since(e.at) < probeTTL {
+		return e.res
+	}
+	e.res, e.url, e.at = probe(), url, time.Now()
+	return e.res
+}
+
+// forget drops the cached probe of a device (after its pin or URL changed).
+func (c *probeCache) forget(id int64) {
+	c.mu.Lock()
+	delete(c.entries, id)
+	c.mu.Unlock()
 }
