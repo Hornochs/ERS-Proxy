@@ -5,6 +5,7 @@ package history
 import (
 	"context"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -98,7 +99,7 @@ func (r *Recorder) Events(ctx context.Context, deviceID int64, events []monitor.
 
 // Run does the maintenance once and then every five minutes until ctx ends.
 func (r *Recorder) Run(ctx context.Context) {
-	r.Maintain(ctx)
+	r.maintainGuarded(ctx)
 	t := time.NewTicker(MaintenanceInterval)
 	defer t.Stop()
 	for {
@@ -106,9 +107,20 @@ func (r *Recorder) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			r.Maintain(ctx)
+			r.maintainGuarded(ctx)
 		}
 	}
+}
+
+// maintainGuarded runs Maintain and logs a panic with its stack instead of
+// letting it end the process.
+func (r *Recorder) maintainGuarded(ctx context.Context) {
+	defer func() {
+		if p := recover(); p != nil {
+			r.log.Error("history maintenance panicked", "panic", p, "stack", string(debug.Stack()))
+		}
+	}()
+	r.Maintain(ctx)
 }
 
 // Maintain rolls samples up and deletes rows past their retention.

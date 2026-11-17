@@ -2,9 +2,12 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -130,4 +133,54 @@ func TestFDBState(t *testing.T) {
 	if !third.FDBTime.Equal(newer.FDBTime) || len(third.FDB) != 0 {
 		t.Errorf("newest FDB not kept: %+v", third)
 	}
+}
+
+// A panic while polling one device is reported as a poll error; the loop keeps
+// running and polls again.
+func TestPollPanicKeepsLoopRunning(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	db, err := store.Open(store.Options{Path: filepath.Join(dir, "t.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := db.Migrate(ctx, log); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := secret.LoadOrCreate(filepath.Join(dir, "k"))
+	d := &store.Device{Name: "bad", Kind: store.KindERS, URL: "http://127.0.0.1", OpenMode: store.OpenInherit,
+		Isolation: store.IsolationSandbox, TLSMode: store.TLSAuto, MonitorSource: store.MonitorEDM,
+		MonitorDriver: store.DriverAuto, MonitorInterval: 60}
+	if err := db.CreateDevice(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	p := New(db, key, monitor.NewRegistry(drivers.All()...), log)
+	var calls atomic.Int32
+	p.OpenEDM = func(context.Context, *store.Device) (monitor.Reader, func(), error) {
+		if calls.Add(1) == 1 {
+			panic("boom")
+		}
+		return nil, nil, errors.New("second poll")
+	}
+	go p.Run(ctx)
+	waitErr := func(want string, poke bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			if s, ok := p.Status(d.ID); ok && strings.Contains(s.Err, want) {
+				return
+			}
+			if poke {
+				p.PollNow(d.ID)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		s, _ := p.Status(d.ID)
+		t.Fatalf("no %q error: %+v", want, s)
+	}
+	waitErr("panicked", false)
+	waitErr("second poll", true)
 }

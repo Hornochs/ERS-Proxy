@@ -12,6 +12,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gosnmp 1.47, goose 3.29, modernc sqlite 1.60, `golang.org/x/*`). `govulncheck` reported about
   47 reachable standard-library vulnerabilities (`net/http`, `crypto/x509`) for the old
   toolchain and reports none now.
+- A panic while polling one device, in the configuration revert loop, in the history maintenance
+  or in a health check is now logged with a stack trace instead of ending the process; the
+  other devices keep being polled.
 
 ### Removed
 

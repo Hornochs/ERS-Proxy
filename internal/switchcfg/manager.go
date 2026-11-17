@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -475,7 +476,7 @@ func (m *Manager) Run(ctx context.Context) {
 	if tick <= 0 {
 		tick = 5 * time.Second
 	}
-	m.Recover(ctx)
+	m.guard("recover", func() { m.Recover(ctx) })
 	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {
@@ -483,9 +484,20 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			m.Sweep(ctx)
+			m.guard("sweep", func() { m.Sweep(ctx) })
 		}
 	}
+}
+
+// guard runs one round of background work and logs a panic with its stack
+// instead of letting it end the process or the loop.
+func (m *Manager) guard(what string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			m.log().Error("configuration manager panicked", "step", what, "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	fn()
 }
 
 // Recover handles the changes a previous run left open: changes interrupted
