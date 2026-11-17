@@ -37,8 +37,8 @@ In the device form (admin), section **Monitoring**:
 
 | Field | Meaning |
 |---|---|
-| Source | `none` (default), `snmp`, `edm`, `swos` or `gwn` (see below). |
-| Driver | `auto` detects the driver from `sysObjectID` once per polling loop; or fix `generic`, `ers`, `cisco`, `tplink`, `voss`, `swos` or `grandstream`. See [compatibility.md](compatibility.md). |
+| Source | `none` (default), `snmp`, `edm`, `swos`, `gwn` or `routeros` (see below). |
+| Driver | `auto` detects the driver from `sysObjectID` once per polling loop; or fix `generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`, `grandstream` or `routeros`. See [compatibility.md](compatibility.md). |
 | Interval | 30–3600 seconds, default 60. |
 | SNMP port | Port 161 by default. |
 
@@ -155,6 +155,39 @@ LLDP and rates match the switch's web interface. LAGs, PoE models and larger GWN
 not seen; PoE is not read. SNMP alone (source `snmp`, driver `grandstream`) shows ports,
 speed, PVID and traffic. The SNMP agent drops requests with more than four variable bindings,
 so ERS-Proxy asks for at most four objects per GET.
+
+### RouterOS source (MikroTik)
+
+RouterOS's SNMP agent reports ports, link, speed, traffic, LLDP neighbours and each port's
+PVID, but no VLAN table, no duplex and no bonds. The source `routeros` reads everything from the
+REST API of RouterOS 7 instead. It
+
+- works only for devices of kind `routeros` and needs the device's stored **web login**; the
+  REST API is part of the web server (service `www-ssl`, from RouterOS 7.9 also `www`), so the
+  device's address is the WebFig address. Confirm a self-signed certificate on the device's
+  edit page ("Check and confirm certificate") before the first poll;
+- sends `GET` requests for an allow-list of menus only (system identity, resource and
+  RouterBOARD, SNMP location, interfaces, ethernet, bonding, VLAN interfaces, bridge, bridge
+  ports, bridge VLANs, IP neighbours) and exactly one command, `/interface/ethernet/monitor`
+  with `once` (a `POST` in the REST API, but it only reads link rate and duplex of the ports
+  with link) – never `set`, `add`, `remove` or `export`. A test checks the requests;
+- numbers ports like the SNMP agent (`ifIndex` = RouterOS's interface ID), so the history
+  continues when the source changes between `snmp` and `routeros`; the front-panel number is the
+  position among the ethernet ports, `ifName` the interface name, `ifAlias` its comment;
+- shows VLANs only for bridges with VLAN filtering (a note names bridges without it), with
+  configured and dynamic members of the bridge VLAN table; VLAN names come from VLAN interfaces
+  on the bridge, otherwise from the entry's comment. A port that admits only tagged frames has
+  no PVID. Members of a bond show the bond's VLANs and PVID;
+- shows neighbours from `/ip/neighbor` (LLDP, CDP and MNDP);
+- does not retry a rejected login until the stored login or the address changes.
+
+Use an account with read rights only: create a group with the policies `read` and `rest-api`
+(plus `api` on versions that require it) and a user in it for ERS-Proxy.
+
+Verified read-only on a CRS310-8G+2S+ (RouterOS 7.25.1): ports, speed, duplex, VLANs, PVID,
+tagging, LLDP neighbour and traffic match the device; SNMP and REST give the same ports. Bonds
+and PoE were not seen on hardware; PoE is not read. SNMP alone (source `snmp`, driver
+`routeros`) shows ports, speed, PVID, LLDP and traffic.
 
 SNMP and the EDM data source use the host of the device's address (`url`) – the same address the
 web interface is reached at. For devices whose management address differs from the address of

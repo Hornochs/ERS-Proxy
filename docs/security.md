@@ -130,6 +130,11 @@ itself (EDM data source) with the pinned certificate and the stored login (T5, T
 - The SwOS data source sends only GET requests for six read-only files and never asks for
   `snmp.b` (which contains the SNMP community); a test checks that the reader contains no write
   methods.
+- The RouterOS data source sends only GET requests for an allow-list of menus and one read-only
+  command (`/interface/ethernet/monitor` with `once`); everything else is refused in the client
+  before it is sent, and a test checks the requests. The REST API uses HTTP Basic
+  authentication on every request: use HTTPS with a pinned certificate, and a RouterOS account
+  with the policies `read` and `rest-api` only.
 
 ### Configuration changes (T8)
 

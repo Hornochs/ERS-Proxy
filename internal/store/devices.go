@@ -29,6 +29,10 @@ const (
 	// directly (like edm-direct), while the server reads its web API with the
 	// stored login for the dashboard's "gwn" data source.
 	KindGWN = "gwn"
+	// KindRouterOS is a MikroTik device with RouterOS: the browser opens
+	// WebFig directly (it forbids framing), while the server reads the REST
+	// API with the stored login for the dashboard's "routeros" data source.
+	KindRouterOS = "routeros"
 )
 
 // Isolation modes for proxied devices.
@@ -54,18 +58,21 @@ const (
 	// MonitorGWN reads the web API of a Grandstream GWN switch, plus its SNMP
 	// agent for counters when SNMP credentials are stored (gwn devices only).
 	MonitorGWN = "gwn"
+	// MonitorRouterOS reads the REST API of RouterOS 7 (routeros devices only).
+	MonitorRouterOS = "routeros"
 )
 
 // Monitoring drivers.
 const (
-	DriverAuto    = "auto"
-	DriverGeneric = "generic"
-	DriverERS     = "ers"
-	DriverCisco   = "cisco"
-	DriverTPLink  = "tplink"
-	DriverVOSS    = "voss"
-	DriverSwOS    = "swos"
-	DriverGWN     = "grandstream"
+	DriverAuto     = "auto"
+	DriverGeneric  = "generic"
+	DriverERS      = "ers"
+	DriverCisco    = "cisco"
+	DriverTPLink   = "tplink"
+	DriverVOSS     = "voss"
+	DriverSwOS     = "swos"
+	DriverGWN      = "grandstream"
+	DriverRouterOS = "routeros"
 )
 
 // SNMP versions.
@@ -114,7 +121,7 @@ type Device struct {
 	HealthEnabled bool
 	Notes         string
 	Sort          int
-	// MonitorSource is none, snmp, edm, swos or gwn; MonitorDriver auto or a driver name.
+	// MonitorSource is none, snmp, edm, swos, gwn or routeros; MonitorDriver auto or a driver name.
 	MonitorSource   string
 	MonitorDriver   string
 	MonitorInterval int // seconds
@@ -148,9 +155,9 @@ func (d *Device) Proxied() bool { return d.Kind == KindERS || d.Kind == KindVSP 
 func (d *Device) VOSS() bool { return d.Kind == KindVSP || d.Kind == KindEDMDirect }
 
 // Direct reports whether the browser opens the device by its URL (link,
-// edm-direct and gwn devices).
+// edm-direct, gwn and routeros devices).
 func (d *Device) Direct() bool {
-	return d.Kind == KindLink || d.Kind == KindEDMDirect || d.Kind == KindGWN
+	return d.Kind == KindLink || d.Kind == KindEDMDirect || d.Kind == KindGWN || d.Kind == KindRouterOS
 }
 
 // EDM reports whether the device has an EDM: the EDM data source and "Open
@@ -159,16 +166,24 @@ func (d *Device) EDM() bool { return d.Kind == KindERS || d.Kind == KindVSP || d
 
 // Upstream reports whether the server talks to the device's web server
 // itself: TLS settings, the certificate pin and the stored login apply
-// (proxied devices, edm-direct and gwn).
-func (d *Device) Upstream() bool { return d.Proxied() || d.Kind == KindEDMDirect || d.Kind == KindGWN }
+// (proxied devices, edm-direct, gwn and routeros).
+func (d *Device) Upstream() bool {
+	return d.Proxied() || d.Kind == KindEDMDirect || d.Kind == KindGWN || d.Kind == KindRouterOS
+}
 
 // AlwaysTab reports whether the device is opened directly but never in a
-// frame (edm-direct, gwn): framed, the browser treats the switch as a third
-// party and hides certificate warnings and its login.
-func (d *Device) AlwaysTab() bool { return d.Kind == KindEDMDirect || d.Kind == KindGWN }
+// frame (edm-direct, gwn, routeros): framed, the browser treats the switch as
+// a third party and hides certificate warnings and its login; RouterOS's
+// WebFig also forbids framing (X-Frame-Options: sameorigin).
+func (d *Device) AlwaysTab() bool {
+	return d.Kind == KindEDMDirect || d.Kind == KindGWN || d.Kind == KindRouterOS
+}
 
 // GWN reports whether the device is a Grandstream GWN switch.
 func (d *Device) GWN() bool { return d.Kind == KindGWN }
+
+// RouterOS reports whether the device is a MikroTik device with RouterOS.
+func (d *Device) RouterOS() bool { return d.Kind == KindRouterOS }
 
 // SwOS reports whether the device is a MikroTik switch with SwOS.
 func (d *Device) SwOS() bool { return d.Kind == KindSwOS }

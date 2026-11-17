@@ -61,6 +61,7 @@ var serverCmd = &cobra.Command{
 		mon.OpenEDM = edm.open
 		mon.OpenSwOS = newSwOSSource(proxy)
 		mon.OpenGWN = newGWNSource(proxy, e.key).open
+		mon.OpenRouterOS = newRouterOSSource(proxy, e.key).open
 		rec := history.New(e.db, e.cfg.Monitor.Retention, log)
 		mon.Sink = rec
 		ui.Monitor = mon

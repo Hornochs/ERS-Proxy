@@ -13,7 +13,7 @@ then update this file, `architecture.md` and the changelog (see [CLAUDE.md](../C
 
 ## Current status
 
-_Last updated: 2026-11-06_
+_Last updated: 2026-11-16_
 
 | Phase | State |
 |---|---|
@@ -24,10 +24,10 @@ _Last updated: 2026-11-06_
 | 4 – Health checks | done |
 | 5 – Auto-login (experimental) | done (mock only) |
 | 6 – Hardware and 1.0 | in progress (6.1 partly) |
-| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721; stacks pending) |
+| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721, CRS310 with RouterOS; stacks pending) |
 | 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.15, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.5, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.16, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
 
 **Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
 ERS (verified against the mock and on the VSPs), and
@@ -43,6 +43,14 @@ VSP 8404 with VOSS 8.10.1.0 (2026-11-06), which also verified 8.6 on hardware. T
 (needs SNMP write credentials on the switch), then VOSS 7.1 (VSP 4850GTS) – checklist in
 section 9 of [hardware-tests.md](hardware-tests.md). ERS switches are not supported by the
 planner yet.
+
+**Verified on hardware (2026-11-16, step 7.16):** MikroTik CRS310-8G+2S+ with RouterOS 7.25.1,
+read-only. New device kind `routeros` (WebFig opened directly in a tab: it sends
+`X-Frame-Options: sameorigin`), driver `routeros` and data source `routeros` (RouterOS's REST
+API, because its SNMP agent has no VLAN table, duplex or bonds). SNMP and REST give the same
+ports (`ifIndex` = interface ID), speed and LLDP neighbour; the REST source also VLANs, tagging,
+PVID and duplex. Self-signed certificate pinned through the edit page; device form, dashboard
+and switch page checked in Chromium. Not seen on hardware: bonds, PoE, several bridges.
 
 **Verified on hardware (2026-11-06, step 7.15):** Grandstream GWN7721 (firmware 1.0.7.128),
 read-only. New device kind `gwn`, driver `grandstream` and data source `gwn` (the switch's web
@@ -237,6 +245,10 @@ Never write to a device: no SNMP sets, no EDM `setVariables`.
   `grandstream`, data source `gwn` (web API for VLANs, duplex, LLDP and LAGs, SNMP for
   counters); SNMP GETs carry at most four objects. *Done: verified read-only on a GWN7721
   (firmware 1.0.7.128).*
+- **7.16 MikroTik RouterOS.** Device kind `routeros` (WebFig opened directly in a tab), driver
+  `routeros` (SNMP: `sysObjectID` .14988.1, ports by position), data source `routeros` (REST API
+  of RouterOS 7: allow-listed GETs plus `/interface/ethernet/monitor` with `once`). *Done:
+  verified read-only on a CRS310-8G+2S+ (RouterOS 7.25.1).*
 
 ## Phase 8 – Switch configuration (planned)
 

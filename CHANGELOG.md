@@ -8,6 +8,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- MikroTik devices with RouterOS 7 (verified read-only on a CRS310-8G+2S+, RouterOS 7.25.1):
+  device kind `routeros` (the browser opens WebFig directly in a tab; the stored login is the
+  web login), driver `routeros` (also over SNMP alone: ports, speed, PVID, LLDP, traffic) and
+  data source `routeros`, which reads ports, VLANs with tagging, PVID, duplex, bonds, neighbours
+  and counters from the REST API (GET of allow-listed menus plus the read-only command
+  `/interface/ethernet/monitor`; a rejected login is not retried). Self-signed certificates are
+  pinned from the device's edit page.
 - Docker Compose examples (`compose.yaml` with a named volume, `compose.bind.yaml` with a local
   data directory), documented in `docs/installation.md`, and a CI workflow that starts both
   and checks health and write access.

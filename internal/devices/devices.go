@@ -83,7 +83,7 @@ func Normalize(d *store.Device) error {
 			return err
 		}
 		d.URL = u
-	case store.KindEDMDirect, store.KindGWN:
+	case store.KindEDMDirect, store.KindGWN, store.KindRouterOS:
 		u, err := normalizeBase(d.URL)
 		if err != nil {
 			return err
@@ -100,7 +100,7 @@ func Normalize(d *store.Device) error {
 		// Isolation and TLS settings only apply to proxied devices.
 		d.Isolation, d.TLSMode, d.TLSPin = store.IsolationSandbox, store.TLSAuto, ""
 	default:
-		return fieldErr("kind", "kind %q: want ers-edm, vsp-edm, edm-direct, swos, gwn or link", d.Kind)
+		return fieldErr("kind", "kind %q: want ers-edm, vsp-edm, edm-direct, swos, gwn, routeros or link", d.Kind)
 	}
 	return nil
 }
@@ -143,17 +143,21 @@ func normalizeMonitoring(d *store.Device) error {
 		if !d.GWN() {
 			return fieldErr("monitor_source", "the GWN data source needs a device of kind gwn")
 		}
+	case store.MonitorRouterOS:
+		if !d.RouterOS() {
+			return fieldErr("monitor_source", "the RouterOS data source needs a device of kind routeros")
+		}
 	default:
-		return fieldErr("monitor_source", "monitor source %q: want none, snmp, edm, swos or gwn", d.MonitorSource)
+		return fieldErr("monitor_source", "monitor source %q: want none, snmp, edm, swos, gwn or routeros", d.MonitorSource)
 	}
 	if d.MonitorDriver == "" {
 		d.MonitorDriver = store.DriverAuto
 	}
 	switch d.MonitorDriver {
 	case store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS,
-		store.DriverSwOS, store.DriverGWN:
+		store.DriverSwOS, store.DriverGWN, store.DriverRouterOS:
 	default:
-		return fieldErr("monitor_driver", "monitor driver %q: want auto, generic, ers, cisco, tplink, voss, swos or grandstream", d.MonitorDriver)
+		return fieldErr("monitor_driver", "monitor driver %q: want auto, generic, ers, cisco, tplink, voss, swos, grandstream or routeros", d.MonitorDriver)
 	}
 	if d.MonitorInterval == 0 {
 		d.MonitorInterval = DefaultMonitorInterval
