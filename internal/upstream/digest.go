@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"net/http"
 	"strings"
@@ -150,7 +149,7 @@ func (c *digestChallenge) authorization(l Login, method, uri string, nc uint32, 
 }
 
 func (c *digestChallenge) hash() func(string) string {
-	var newHash func() hash.Hash = md5.New
+	newHash := md5.New
 	if strings.HasPrefix(strings.ToUpper(c.algorithm), "SHA-256") {
 		newHash = sha256.New
 	}

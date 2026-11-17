@@ -209,7 +209,8 @@ func (s *Server) portConfig(r *http.Request, p *Page, st poller.Status, port *mo
 		return nil
 	}
 	c := cv.Caps
-	if !cv.CanEdit || st.Snap == nil || !(c.Admin || c.Alias || c.PoE && port.PoE != nil || c.PortVLANs) {
+	editable := c.Admin || c.Alias || c.PoE && port.PoE != nil || c.PortVLANs
+	if !cv.CanEdit || st.Snap == nil || !editable {
 		return cv
 	}
 	f := &portFormView{IfIndex: port.IfIndex, Alias: port.Alias, Mode: "keep",
@@ -457,8 +458,9 @@ func (s *Server) portChange(r *http.Request, st poller.Status) (switchcfg.Change
 		}
 		cur := port.Untagged
 		hybridNow := port.Mode == "hybrid"
-		if !(sameSet(cur, untaggedSet(v.Untagged)) && sameSet(port.Tagged, v.Tagged) &&
-			(mode != "hybrid" || hybridNow) && (mode != "access" || !hybridNow)) {
+		unchanged := sameSet(cur, untaggedSet(v.Untagged)) && sameSet(port.Tagged, v.Tagged) &&
+			(mode != "hybrid" || hybridNow) && (mode != "access" || !hybridNow)
+		if !unchanged {
 			pc.VLANs = v
 		}
 	}

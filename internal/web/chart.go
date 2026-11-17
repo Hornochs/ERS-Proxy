@@ -160,9 +160,10 @@ func buildChart(samples []store.Sample, span time.Duration, now time.Time, label
 	for i := 0; i <= 5; i++ {
 		ts := t0 + (t1-t0)*int64(i)/5
 		anchor := "middle"
-		if i == 0 {
+		switch i {
+		case 0:
 			anchor = "start"
-		} else if i == 5 {
+		case 5:
 			anchor = "end"
 		}
 		fmt.Fprintf(&b, `<line class="grid" x1="%.1f" x2="%.1f" y1="%g" y2="%g"/>`, x(ts), x(ts), chartYBot, chartYBot+4)

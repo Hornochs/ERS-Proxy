@@ -6,6 +6,19 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Build with Go 1.26 (toolchain 1.26.11, was 1.24.7) and current dependencies (chi 5.5,
+  gosnmp 1.47, goose 3.29, modernc sqlite 1.60, `golang.org/x/*`). `govulncheck` reported about
+  47 reachable standard-library vulnerabilities (`net/http`, `crypto/x509`) for the old
+  toolchain and reports none now.
+
+### Changed
+
+- Container image based on Alpine 3.24 (was 3.21).
+- CI: golangci-lint v2 (`.golangci.yml`, standard linters plus gofmt) and current versions of
+  the GitHub Actions.
+
 ### Added
 
 - MikroTik devices with RouterOS 7 (verified read-only on a CRS310-8G+2S+, RouterOS 7.25.1):
@@ -18,6 +31,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Docker Compose examples (`compose.yaml` with a named volume, `compose.bind.yaml` with a local
   data directory), documented in `docs/installation.md`, and a CI workflow that starts both
   and checks health and write access.
+
+## [1.1.0] - 2026-11-07
+
+### Added
+
 - Grandstream GWN switches (verified read-only on a GWN7721, firmware 1.0.7.128): device kind
   `gwn` (the browser opens the switch's web interface directly in a tab; the stored login is
   the web login), driver `grandstream` and data source `gwn`, which reads VLANs, duplex, LLDP
@@ -46,6 +64,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "hybrid" needs an untagged VLAN).
 - A confirmed change on VOSS is now saved to NVRAM (`rcSysActionL1` = 7) and ends as
   `confirmed`, not `confirmed_unsaved`.
+- MikroTik SwOS switches (step 7.14), verified read-only on a CRS305-1G-4S+ with SwOS 2.18:
+  - Device kind `swos`: SwOS's web interface embedded through the proxy. ERS-Proxy logs in with
+    the stored web login (HTTP Digest, `upstream.Options.Login`); the browser never sees the
+    password or a login dialog. The shim maps SwOS's absolute XHR paths below the proxy path.
+  - Port dashboard driver `swos` (detected by `sysObjectID` 1.3.6.1.4.1.14988.2): ports, speed and
+    traffic over SNMP, model, serial number and firmware from MIKROTIK-MIB.
+  - Data source `swos` (`internal/swos`, `internal/monitor/swossrc`): reads SwOS's web API (GET
+    of six read-only files) for VLANs, PVID, tagging, duplex and LAGs, which SwOS's SNMP agent
+    does not provide. Port names follow SwOS (`ETH/BOOT`, `SFP1`, …).
+- The proxy no longer forwards the browser's `Authorization` header to any switch and drops
+  `WWW-Authenticate` from switch answers.
 
 ### Changed
 
@@ -71,6 +100,51 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - EDM write errors now include the failed variable (`snmpErrorIndex`) and the name of the
   standard SNMP error status.
 
+## [1.0.0] - 2026-11-04
+
+### Added
+
+- Browser test `tools/e2e/edm_e2e.py` also runs in Firefox (`E2E_BROWSER=firefox`, geckodriver;
+  JavaScript errors through WebDriver BiDi) and WebKitGTK, Safari's engine (`E2E_BROWSER=webkit`,
+  webkit2gtk-driver, under `xvfb-run`). Verified with Firefox ESR 153 and WebKitGTK 2.54 against
+  the mock switch and on the VSPs.
+- SNMPv3 integration tests against snmpsim (`snmptest.SimulatorV3`): noAuthNoPriv and
+  authNoPriv with MD5, SHA and SHA-256, and a wrong password. authPriv cases are skipped because
+  snmpsim cannot decrypt them (`ERSPROXY_SNMPSIM_PRIV=1` runs them).
+- SNMP access can be entered when a device is added. The SNMP version (v2c/v3) is now chosen in
+  the SNMP access card together with the credentials instead of being saved first in the main
+  form; the card shows only the fields of the chosen version and v3 security level.
+- "Open in EDM" for a port (dashboard panel and port page) now opens that port: EDM selects it
+  in the device view and opens its edit dialog (verified on a VSP 4850GTS; ERS through the same
+  `Port_<ifIndex>` elements, not yet verified on hardware). Verified on VOSS 7.1 and 8.10; the
+  double-click is repeated until the dialog appears, since VOSS 8 ignores it while still
+  loading the port data.
+- Device kind `vsp-edm`: a VSP switch with VOSS whose EDM runs through the proxy like an ERS –
+  embedded in the workspace, with auto-login and the certificate pinned on the server (verified
+  on a VSP 4850GTS with VOSS 7.1.10.0). `edm-direct` remains for opening a VSP directly.
+- The shim provides `localStorage` and `sessionStorage` in the sandbox, kept per proxy session
+  and never sent to the switch. VOSS's login page needs them: without, it stored the user name
+  in a cookie that reached the switch, and the login failed.
+- Extreme VSP switches with VOSS (verified on a VSP 4850GTS, VOSS 7.1.10.0):
+  - New device kind `edm-direct` ("EDM switch, opened directly"): the browser opens the switch
+    by its URL like a link (VOSS's EDM works in current browsers), while TLS mode, certificate
+    pin, stored login and the EDM data source work as for `ers-edm`. The certificate is confirmed
+    from the device's edit page (*Check and confirm certificate*). No migration needed.
+  - Port dashboard driver `voss` (`sysObjectID` 1.3.6.1.4.1.2272.): front-panel slot/port from
+    `ifName`, RAPID-CITY VLANs, PVID and tagging, speed/duplex from `rcPortTable`, MLT, chassis
+    serial and release. Synthetic `voss.snmprec`.
+  - EDM login in the VOSS variant (`encode_vrf`: one form POST, no length prefix, no
+    15-character limit), detected from the login page.
+  - `upstream.Options.KeepAlive`: requests to VOSS devices (`edm-direct`, `vsp-edm`) say
+    `Connection: keep-alive`; VOSS's web server resets connections it is asked to close and the
+    answer is lost.
+  - EDM data source: object names the switch cannot resolve (`Oid_Conversion_Fail`; VOSS lacks
+    `ifName`, `ifType`, `ifHighSpeed`) are left out for the session instead of truncating the
+    table to one row; a replaced session is logged out (`/logout.html`), since VOSS allows only a
+    few web sessions.
+
+### Fixed
+
 - "Open in EDM" for a port left `TypeError` messages in the console on VOSS 8 while EDM was
   still loading; the shim now calls EDM's click handlers directly and keeps such early failures
   to itself while it retries.
@@ -89,6 +163,58 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ports without link showed "half" duplex on ERS and VSP switches (`rcPortOperDuplex` reports
   half duplex for them); duplex from the RAPID-CITY port table is now only shown for ports that
   are up.
+
+## [0.1.0] - 2026-11-03
+
+### Added
+
+- Image cache in the EDM proxy: images of a device are kept in memory (up to 8 MiB per device)
+  and served from there on later EDM starts. Each start used to fetch a few hundred images again
+  because the proxy path changes with every token.
+- Port dashboard (phase 7): common snapshot model, driver registry with auto-detection and the
+  drivers generic (Q-BRIDGE) and ERS (RAPID-CITY VLANs, MLT, stack units) (steps 7.2, 7.3);
+  poller with traffic rates, counter-wrap/reset handling and port events (step 7.4); dashboard
+  overview with faceplates, VLAN highlight, search and port panel (step 7.6); experimental EDM
+  data source for ERS switches without SNMP (step 7.8); `ers-proxy snmp-capture` and
+  `snmp-test --collect`; documentation `docs/monitoring.md` and `docs/drivers.md` (step 7.11).
+- Switch and port pages (step 7.7): `/dashboard/{id}` with header, faceplate, sortable port table,
+  VLAN table and recent events; `/dashboard/{id}/port/{ifindex}` with all port fields, port events
+  and server-rendered SVG traffic charts (1h, 24h, 7d, 30d, 1y; in/out, peaks for coarse
+  resolutions, errors per interval) with hover tooltips. Dashboard card titles link to the switch
+  page, the port panel has a "Details" link.
+- Cisco and TP-Link port dashboard drivers (steps 7.9, 7.10): Cisco reads VLANs, access VLAN
+  and trunks from CISCO-VTP-MIB and CISCO-VLAN-MEMBERSHIP-MIB (Q-BRIDGE fallback); the TP-Link
+  driver is preliminary and uses Q-BRIDGE. Synthetic `cisco.snmprec` and `tplink.snmprec`.
+- Port history (step 7.5): migration `00003_history.sql` (`port_samples`, `port_events`),
+  `internal/monitor/history` recorder with roll-up (1 min, 15 min, 1 h) and retention job, config
+  section `monitor.retention` (`minute`, `quarter`, `hour`, `events`).
+- SNMP foundation (step 7.1): read-only `internal/snmp` (v2c/v3), encrypted SNMP credentials
+  bound to device, host and SNMP port, migration `00002_monitoring.sql` and "Monitoring"
+  fields in the device form and in import/export, "SNMP access" card, `snmp-test` command,
+  snmpsim test harness (`internal/snmptest`; CI installs snmpsim).
+- Repository documents, roadmap and documentation skeleton (step 0.1).
+- Go module, command line (`version`, `config init`) and YAML configuration (step 0.2).
+- CI, security scans (CodeQL, dependency review, govulncheck, gitleaks), dependabot and
+  issue templates (step 0.3).
+- SQLite store with migrations, `migrate` and `backup` commands (step 1.1).
+- AES-256-GCM encryption of credentials bound to device and host (step 1.2).
+- Users with roles `admin` and `user`, Argon2id passwords, sessions, CSRF protection and
+  login lockout; `user` commands (step 1.3).
+- Web UI foundation: login, account page, security headers, English and German (step 1.4).
+- Packages (deb, rpm, Arch, apk), Docker image and release workflow with install tests
+  (step 1.5).
+- Groups and devices (ERS switches through the proxy, other devices as links), sidebar with
+  status dots and filter, tabbed workspace, open modes per user and device, JSON/CSV import and
+  export, `device` commands (phase 2).
+- EDM proxy: TLS 1.0–1.3 with automatic legacy fallback and certificate pinning, proxy sessions
+  with server-side cookie jar, browser sandbox for switch content, content-based patches for
+  Ext JS 2.2 and absolute paths, diagnostics page, `tls-probe` command, `tools/mockswitch`
+  and a browser test (phase 3).
+- Health checks: reachability, certificate changes, framing detection for links (phase 4).
+- Experimental automatic EDM login with stored, encrypted credentials (phase 5).
+
+### Fixed
+
 - EDM login through the proxy did nothing after clicking *Log On* on a real ERS 5600: browsers
   send `Cache-Control: max-age=0` with the form submit, and the switch answers every such
   request with an empty `304 Not Modified`, even a POST. The proxy no longer forwards the
@@ -132,102 +258,3 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - ERS driver: the out-of-band management port (ifIndex 55001) appeared as front-panel port
   "430/89". Interfaces beyond the largest stack (8 units) are no longer counted as front-panel
   ports; the synthetic `ers5600` fixture now contains such a port.
-
-### Added
-
-- MikroTik SwOS switches (step 7.14), verified read-only on a CRS305-1G-4S+ with SwOS 2.18:
-  - Device kind `swos`: SwOS's web interface embedded through the proxy. ERS-Proxy logs in with
-    the stored web login (HTTP Digest, `upstream.Options.Login`); the browser never sees the
-    password or a login dialog. The shim maps SwOS's absolute XHR paths below the proxy path.
-  - Port dashboard driver `swos` (detected by `sysObjectID` 1.3.6.1.4.1.14988.2): ports, speed and
-    traffic over SNMP, model, serial number and firmware from MIKROTIK-MIB.
-  - Data source `swos` (`internal/swos`, `internal/monitor/swossrc`): reads SwOS's web API (GET
-    of six read-only files) for VLANs, PVID, tagging, duplex and LAGs, which SwOS's SNMP agent
-    does not provide. Port names follow SwOS (`ETH/BOOT`, `SFP1`, …).
-- The proxy no longer forwards the browser's `Authorization` header to any switch and drops
-  `WWW-Authenticate` from switch answers.
-
-- Browser test `tools/e2e/edm_e2e.py` also runs in Firefox (`E2E_BROWSER=firefox`, geckodriver;
-  JavaScript errors through WebDriver BiDi) and WebKitGTK, Safari's engine (`E2E_BROWSER=webkit`,
-  webkit2gtk-driver, under `xvfb-run`). Verified with Firefox ESR 153 and WebKitGTK 2.54 against
-  the mock switch and on the VSPs.
-- SNMPv3 integration tests against snmpsim (`snmptest.SimulatorV3`): noAuthNoPriv and
-  authNoPriv with MD5, SHA and SHA-256, and a wrong password. authPriv cases are skipped because
-  snmpsim cannot decrypt them (`ERSPROXY_SNMPSIM_PRIV=1` runs them).
-- SNMP access can be entered when a device is added. The SNMP version (v2c/v3) is now chosen in
-  the SNMP access card together with the credentials instead of being saved first in the main
-  form; the card shows only the fields of the chosen version and v3 security level.
-- "Open in EDM" for a port (dashboard panel and port page) now opens that port: EDM selects it
-  in the device view and opens its edit dialog (verified on a VSP 4850GTS; ERS through the same
-  `Port_<ifIndex>` elements, not yet verified on hardware). Verified on VOSS 7.1 and 8.10; the
-  double-click is repeated until the dialog appears, since VOSS 8 ignores it while still
-  loading the port data.
-- Device kind `vsp-edm`: a VSP switch with VOSS whose EDM runs through the proxy like an ERS –
-  embedded in the workspace, with auto-login and the certificate pinned on the server (verified
-  on a VSP 4850GTS with VOSS 7.1.10.0). `edm-direct` remains for opening a VSP directly.
-- The shim provides `localStorage` and `sessionStorage` in the sandbox, kept per proxy session
-  and never sent to the switch. VOSS's login page needs them: without, it stored the user name
-  in a cookie that reached the switch, and the login failed.
-- Extreme VSP switches with VOSS (verified on a VSP 4850GTS, VOSS 7.1.10.0):
-  - New device kind `edm-direct` ("EDM switch, opened directly"): the browser opens the switch
-    by its URL like a link (VOSS's EDM works in current browsers), while TLS mode, certificate
-    pin, stored login and the EDM data source work as for `ers-edm`. The certificate is confirmed
-    from the device's edit page (*Check and confirm certificate*). No migration needed.
-  - Port dashboard driver `voss` (`sysObjectID` 1.3.6.1.4.1.2272.): front-panel slot/port from
-    `ifName`, RAPID-CITY VLANs, PVID and tagging, speed/duplex from `rcPortTable`, MLT, chassis
-    serial and release. Synthetic `voss.snmprec`.
-  - EDM login in the VOSS variant (`encode_vrf`: one form POST, no length prefix, no
-    15-character limit), detected from the login page.
-  - `upstream.Options.KeepAlive`: requests to VOSS devices (`edm-direct`, `vsp-edm`) say
-    `Connection: keep-alive`; VOSS's web server resets connections it is asked to close and the
-    answer is lost.
-  - EDM data source: object names the switch cannot resolve (`Oid_Conversion_Fail`; VOSS lacks
-    `ifName`, `ifType`, `ifHighSpeed`) are left out for the session instead of truncating the
-    table to one row; a replaced session is logged out (`/logout.html`), since VOSS allows only a
-    few web sessions.
-
-- Image cache in the EDM proxy: images of a device are kept in memory (up to 8 MiB per device)
-  and served from there on later EDM starts. Each start used to fetch a few hundred images again
-  because the proxy path changes with every token.
-
-- Port dashboard (phase 7): common snapshot model, driver registry with auto-detection and the
-  drivers generic (Q-BRIDGE) and ERS (RAPID-CITY VLANs, MLT, stack units) (steps 7.2, 7.3);
-  poller with traffic rates, counter-wrap/reset handling and port events (step 7.4); dashboard
-  overview with faceplates, VLAN highlight, search and port panel (step 7.6); experimental EDM
-  data source for ERS switches without SNMP (step 7.8); `ers-proxy snmp-capture` and
-  `snmp-test --collect`; documentation `docs/monitoring.md` and `docs/drivers.md` (step 7.11).
-- Switch and port pages (step 7.7): `/dashboard/{id}` with header, faceplate, sortable port table,
-  VLAN table and recent events; `/dashboard/{id}/port/{ifindex}` with all port fields, port events
-  and server-rendered SVG traffic charts (1h, 24h, 7d, 30d, 1y; in/out, peaks for coarse
-  resolutions, errors per interval) with hover tooltips. Dashboard card titles link to the switch
-  page, the port panel has a "Details" link.
-- Cisco and TP-Link port dashboard drivers (steps 7.9, 7.10): Cisco reads VLANs, access VLAN
-  and trunks from CISCO-VTP-MIB and CISCO-VLAN-MEMBERSHIP-MIB (Q-BRIDGE fallback); the TP-Link
-  driver is preliminary and uses Q-BRIDGE. Synthetic `cisco.snmprec` and `tplink.snmprec`.
-- Port history (step 7.5): migration `00003_history.sql` (`port_samples`, `port_events`),
-  `internal/monitor/history` recorder with roll-up (1 min, 15 min, 1 h) and retention job, config
-  section `monitor.retention` (`minute`, `quarter`, `hour`, `events`).
-- SNMP foundation (step 7.1): read-only `internal/snmp` (v2c/v3), encrypted SNMP credentials
-  bound to device, host and SNMP port, migration `00002_monitoring.sql` and "Monitoring"
-  fields in the device form and in import/export, "SNMP access" card, `snmp-test` command,
-  snmpsim test harness (`internal/snmptest`; CI installs snmpsim).
-- Repository documents, roadmap and documentation skeleton (step 0.1).
-- Go module, command line (`version`, `config init`) and YAML configuration (step 0.2).
-- CI, security scans (CodeQL, dependency review, govulncheck, gitleaks), dependabot and
-  issue templates (step 0.3).
-- SQLite store with migrations, `migrate` and `backup` commands (step 1.1).
-- AES-256-GCM encryption of credentials bound to device and host (step 1.2).
-- Users with roles `admin` and `user`, Argon2id passwords, sessions, CSRF protection and
-  login lockout; `user` commands (step 1.3).
-- Web UI foundation: login, account page, security headers, English and German (step 1.4).
-- Packages (deb, rpm, Arch, apk), Docker image and release workflow with install tests
-  (step 1.5).
-- Groups and devices (ERS switches through the proxy, other devices as links), sidebar with
-  status dots and filter, tabbed workspace, open modes per user and device, JSON/CSV import and
-  export, `device` commands (phase 2).
-- EDM proxy: TLS 1.0–1.3 with automatic legacy fallback and certificate pinning, proxy sessions
-  with server-side cookie jar, browser sandbox for switch content, content-based patches for
-  Ext JS 2.2 and absolute paths, diagnostics page, `tls-probe` command, `tools/mockswitch`
-  and a browser test (phase 3).
-- Health checks: reachability, certificate changes, framing detection for links (phase 4).
-- Experimental automatic EDM login with stored, encrypted credentials (phase 5).

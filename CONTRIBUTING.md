@@ -6,7 +6,7 @@ refer to its step numbers in issues and pull requests.
 
 ## Development setup
 
-You need Go 1.24 or newer. If your Go is newer, set `GOTOOLCHAIN=local` so that `go get` does
+You need Go 1.26 or newer. If your Go is newer, set `GOTOOLCHAIN=local` so that `go get` does
 not pull dependencies that require a newer toolchain.
 
 ```bash
