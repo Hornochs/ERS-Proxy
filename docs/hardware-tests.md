@@ -231,6 +231,23 @@ Needs RouterOS 7 with the service `www-ssl` (or `www`) enabled, an account in a 
    log in to WebFig, look at Quick Set and Advanced › Interfaces, log out. The browser's network
    tab shows only requests below `/d/{token}/`.
 
+## 11. SSH console (phase 9, `ssh.enabled`)
+
+Read-only: log in and run `show` commands only.
+
+1. Turn on the console for the device (edit page, card "SSH console"); for VSPs store an SSH
+   login of its own, ERS and RouterOS use the web login.
+2. Open "›_" in the sidebar. *Expect:* the host key is shown for confirmation (compare with the
+   device, e.g. `show ssh global` on ERS/VOSS, `/ip ssh print` on RouterOS), then the CLI.
+3. ERS: *Expect* profile `legacy` with `ssh-dss` and a SHA-1 key exchange in the status line,
+   the banner, "Enter Ctrl-Y to begin". Run `show sys-info`.
+4. VSP: `show sys-info`; RouterOS: `/system resource print`. Resize the window: long output
+   wraps at the new width.
+5. Wait for the idle timeout (or set `ssh.idle_timeout: 1m` on a test instance): the console
+   closes with "idle". Log out of the portal: open consoles close within 30 s.
+6. Check the audit log: `ssh.hostkey.trust`, `ssh.open` with the algorithms, `ssh.close` with
+   duration and bytes; no password anywhere.
+
 ## After the tests
 
 - Update [compatibility.md](compatibility.md): model, firmware, transport, result, how verified.
@@ -287,3 +304,6 @@ Needs RouterOS 7 with the service `www-ssl` (or `www`) enabled, an account in a 
 | R.1 | MikroTik CRS310-8G+2S+ (RouterOS 7.25.1): SNMP dashboard data | ok | 2026-11-16, read-only: driver `routeros`, ten ethernet ports in front-panel order, speed, PVID, LLDP neighbour and traffic match WebFig; no VLAN table, EtherLike or IEEE8023-LAG over SNMP |
 | R.2 | RouterOS: REST data source | ok | same ports and `ifIndex` as SNMP, plus VLAN membership (VLAN 1337 untagged on ether1–8 and sfp-sfpplus1, tagged on sfp-sfpplus2), PVID and duplex; self-signed certificate pinned through the edit page. Bonds, PoE and several bridges not configured on the test device |
 | R.3 | RouterOS: WebFig through the proxy (7.17) | ok after fix | 2026-11-16, Chromium, embedded: login, Quick Set, Advanced › Interfaces with live rates, logout; nothing outside `/d/{token}/`. Fixed on the way: menu files (`.jg`) answered `406` until the proxy sent `Accept-Encoding: gzip`. WebFig's own script error (`ftype`) also appears without the proxy |
+| S.1 | SSH console against a fake ERS (ssh-dss, dh-group14-sha1, aes128-cbc) | ok | 2026-11-16, Chromium: host key confirmation, changed-key warning, login prompt, legacy profile, banner, input, exit; no CSP errors. Real switches pending (section 11) |
+| S.2 | SSH console: ERS 5632FD (6.6.3.015) | ok | 2026-11-16: an old profile chosen automatically (the switch offers only SHA-1 key exchanges; `compat` suffices), host key `ssh-rsa`, web login, banner, Ctrl-Y, `show sys-info`, `logout`; no console errors |
+| S.3 | SSH console: CRS310-8G+2S+ (RouterOS 7.25.1) | ok | 2026-11-16: profile `modern` (ML-KEM hybrid key exchange), web login, `/system resource print`, `/quit` |

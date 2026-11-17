@@ -26,6 +26,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- SSH console (phase 9): admins open a terminal for a device in a workspace tab (xterm.js over
+  a WebSocket; the server holds the SSH connection). Off unless `ssh.enabled: true` is set in
+  `config.yaml` (`ssh.idle_timeout`, `ssh.connect_timeout`, `ssh.max_sessions`), and per
+  device in the new "SSH console" card. Logins: the stored web login (ERS, RouterOS), an SSH
+  login of its own (VOSS) or typed in the console. Host keys are confirmed once and pinned; a
+  changed key stops the connection. Switches with old SSH servers work: VSPs with VOSS and
+  ERS 5600 through the profile `compat` (SHA-1 key exchanges, `ssh-rsa`, CBC from the current
+  x/crypto), ERS firmware with only `ssh-dss` or HMAC-MD5 through a frozen copy of x/crypto/ssh
+  v0.58.0 that is used for ERS switches only. Audit entries for opening, closing and host keys; nothing typed
+  or shown is recorded. Reverse proxies must pass WebSockets (`docs/reverse-proxy.md`).
+- Migration `00005_ssh.sql`: SSH console settings, the encrypted SSH login and the pinned host
+  key per device.
 - **Add several devices at once** (`/admin/devices/bulk`, button "Add several" on the device
   list): shared settings (type, group, monitoring, web login, SNMP access) and a table of
   names and addresses, with paste from a spreadsheet. Everything is created atomically or

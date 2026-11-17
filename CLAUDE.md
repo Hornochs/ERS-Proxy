@@ -59,6 +59,11 @@ Do not commit, push or test against real switches unless explicitly asked.
   `configure.enabled` is set in `config.yaml` – never add another way to enable it (environment
   variable, flag, UI). Monitoring (`internal/monitor`, `internal/snmp`) stays read-only; keep
   the `TestReadOnly` tests and the import/`Set` guards in `internal/switchcfg` passing.
+- **The SSH console stays opt-in and admin-only.** It exists only when `ssh.enabled` is set in
+  `config.yaml` – never add another way to enable it – and its routes stay in the admin group.
+  Host keys are checked before a login is sent. `internal/legacyssh` (frozen x/crypto/ssh
+  copy for old ERS) is imported only by `internal/webssh` and used only for `ers-edm` devices
+  (`TestLegacySSHOnlyForWebSSH`); never "update" it to a newer x/crypto, which has no `ssh-dss`.
 - No change to configuration or data model without matching docs (`docs/configuration.md`,
   `docs/architecture.md`). Never change a released migration – add a new file.
 

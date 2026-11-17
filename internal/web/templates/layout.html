@@ -8,6 +8,7 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <script src="/static/app.js" defer></script>
 {{if eq .Nav "dashboard"}}<script src="/static/dashboard.js" defer></script><script src="/static/switch.js" defer></script>{{end}}
+{{if eq .Nav "ssh"}}<link rel="stylesheet" href="/static/vendor/xterm/xterm.css"><script src="/static/vendor/xterm/xterm.js" defer></script><script src="/static/vendor/xterm/addon-fit.js" defer></script><script src="/static/ssh.js" defer></script>{{end}}
 </head>
 <body class="{{if .Wide}}wide{{end}}"{{if .CSRF}} data-csrf="{{.CSRF}}"{{end}}>
 {{if and .User (not .Embedded)}}

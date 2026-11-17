@@ -37,6 +37,8 @@ type sidebarGroup struct {
 type workspaceData struct {
 	Groups []sidebarGroup
 	Count  int
+	// SSH: the SSH console is enabled and the user may use it (admins).
+	SSH bool
 }
 
 // EffectiveOpenMode resolves device → user → global default. Link devices
@@ -83,7 +85,7 @@ func (s *Server) sidebar(r *http.Request) (*workspaceData, error) {
 		return nil, err
 	}
 	u := app.User(r.Context())
-	data := &workspaceData{Count: len(devs)}
+	data := &workspaceData{Count: len(devs), SSH: s.SSH != nil && u.Can(store.RoleAdmin)}
 	idx := map[string]int{}
 	for _, d := range devs {
 		sd := sidebarDevice{Device: d, Mode: s.EffectiveOpenMode(u, d), Href: "/open/" + strconv.FormatInt(d.ID, 10)}

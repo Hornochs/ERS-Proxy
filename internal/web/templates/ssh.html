@@ -1,0 +1,43 @@
+{{define "content"}}
+{{$d := .Data.Device}}
+<div class="ssh" id="ssh" data-ws="/ssh/{{$d.ID}}/ws" data-trust="/ssh/{{$d.ID}}/hostkey" data-nonce="{{.Data.Nonce}}"
+     data-msg-connecting="{{.T "ssh.connecting"}}" data-msg-connected="{{.T "ssh.connected"}}"
+     data-msg-closed="{{.T "ssh.closed"}}" data-msg-login="{{.T "ssh.login_needed"}}" data-msg-rejected="{{.T "ssh.login_rejected"}}"
+     data-msg-err-login="{{.T "ssh.err.login"}}" data-msg-err-algorithms="{{.T "ssh.err.algorithms"}}"
+     data-msg-err-legacy="{{.T "ssh.err.legacy"}}" data-msg-err-connect="{{.T "ssh.err.connect"}}"
+     data-msg-err-busy="{{.T "ssh.err.busy"}}" data-msg-trusted="{{.T "ssh.hostkey_trusted"}}">
+  <div class="ssh-bar">
+    <strong>{{$d.Name}}</strong>
+    <span class="muted small">SSH · {{.T (print "ssh.login." .Data.Login)}}</span>
+    <span id="ssh-status" class="ssh-status" role="status"></span>
+    <span id="ssh-info" class="muted small"></span>
+    <button type="button" id="ssh-reconnect" hidden>{{.T "ssh.reconnect"}}</button>
+  </div>
+  <form id="ssh-login" class="ssh-panel card" hidden autocomplete="off">
+    <p id="ssh-login-msg"></p>
+    <div class="grid">
+      <label>{{.T "login.username"}}<input name="user" autocomplete="off" required></label>
+      <label>{{.T "login.password"}}<input name="pass" type="password" autocomplete="off"></label>
+    </div>
+    <p class="small muted">{{.T "ssh.login_hint"}}</p>
+    <div class="actions"><button class="primary" type="submit">{{.T "ssh.login_submit"}}</button></div>
+  </form>
+  <div id="ssh-hostkey" class="ssh-panel card" hidden>
+    <h3 id="ssh-hostkey-title"></h3>
+    <p id="ssh-hostkey-text"></p>
+    <table class="kv">
+      <tr><th>{{.T "ssh.hostkey_type"}}</th><td><code id="ssh-hostkey-type"></code></td></tr>
+      <tr><th>{{.T "trust.fingerprint"}}</th><td><code id="ssh-hostkey-fp" class="fingerprint"></code></td></tr>
+      <tr id="ssh-hostkey-want-row" hidden><th>{{.T "ssh.hostkey_pinned"}}</th><td><code id="ssh-hostkey-want" class="fingerprint"></code></td></tr>
+    </table>
+    <p class="small muted" id="ssh-hostkey-hint"></p>
+    <div class="actions"><button class="primary" type="button" id="ssh-hostkey-trust" hidden>{{.T "ssh.hostkey_trust"}}</button>
+      <a class="button" id="ssh-hostkey-edit" href="/admin/devices/{{$d.ID}}/edit" target="_top" hidden>{{.T "action.edit"}}</a></div>
+    <template id="ssh-t-new">{{.T "ssh.hostkey_new"}}</template>
+    <template id="ssh-t-new-text">{{.T "ssh.hostkey_new_text"}}</template>
+    <template id="ssh-t-changed">{{.T "ssh.hostkey_changed"}}</template>
+    <template id="ssh-t-changed-text">{{.T "ssh.hostkey_changed_text"}}</template>
+  </div>
+  <div id="ssh-term" class="ssh-term"></div>
+</div>
+{{end}}

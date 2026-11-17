@@ -120,6 +120,50 @@
   <p class="small muted">{{.T "devices.snmp_hint"}}</p>
   <p class="small muted">{{if .Data.Configure}}{{.T "devices.snmp_readonly_cfg"}}{{else}}{{.T "devices.snmp_readonly"}}{{end}}</p>
 </section>
+{{if and .Data.SSH (sshSupported $d)}}
+<section class="card ssh-settings">
+  <h3>{{.T "devices.ssh"}}</h3>
+  <form method="post" action="/admin/devices/{{$d.ID}}/ssh" class="form-grid" id="ssh-form" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label class="check span-all"><input type="checkbox" name="ssh_enabled" value="1"{{if $d.SSHEnabled}} checked{{end}}> {{.T "devices.ssh_enabled"}}</label>
+    <label>{{.T "devices.ssh_port"}}<input name="ssh_port" type="number" min="1" max="65535" value="{{$d.SSHPort}}"></label>
+    <label>{{.T "devices.ssh_login"}}
+      <select name="ssh_login">
+        <option value=""{{if eq $d.SSHLogin ""}} selected{{end}}>{{.T "ssh.login.default" (.T (print "ssh.login." (sshDefaultLogin $d.Kind)))}}</option>
+        {{if $d.Upstream}}<option value="web"{{if eq $d.SSHLogin "web"}} selected{{end}}>{{.T "ssh.login.web"}}</option>{{end}}
+        <option value="own"{{if eq $d.SSHLogin "own"}} selected{{end}}>{{.T "ssh.login.own"}}</option>
+        <option value="ask"{{if eq $d.SSHLogin "ask"}} selected{{end}}>{{.T "ssh.login.ask"}}</option>
+      </select>
+    </label>
+    <label>{{.T "devices.ssh_profile"}}
+      <select name="ssh_profile">
+        <option value="auto"{{if eq $d.SSHProfile "auto"}} selected{{end}}>{{.T "ssh.profile.auto"}}</option>
+        <option value="modern"{{if eq $d.SSHProfile "modern"}} selected{{end}}>{{.T "ssh.profile.modern"}}</option>
+        <option value="compat"{{if eq $d.SSHProfile "compat"}} selected{{end}}>{{.T "ssh.profile.compat"}}</option>
+        {{if eq $d.Kind "ers-edm"}}<option value="legacy"{{if eq $d.SSHProfile "legacy"}} selected{{end}}>{{.T "ssh.profile.legacy"}}</option>{{end}}
+      </select>
+    </label>
+    <p class="small muted span-all">{{if eq $d.Kind "ers-edm"}}{{.T "devices.ssh_profile_hint_ers"}}{{else}}{{.T "devices.ssh_profile_hint"}}{{end}}</p>
+    <fieldset class="span-all">
+      <legend>{{.T "devices.ssh_own_login"}}</legend>
+      <p class="small muted">{{if $d.HasSSHCredentials}}{{.T "devices.ssh_login_stored"}}{{else}}{{.T "devices.ssh_login_none"}}{{end}}</p>
+      <div class="form-grid">
+        <label>{{.T "login.username"}}<input name="ssh_username" maxlength="64" autocomplete="off"></label>
+        <label>{{.T "login.password"}}<input name="ssh_password" type="password" maxlength="128" autocomplete="new-password"></label>
+        <label>{{.T "devices.confirm_password"}}<input name="confirm_password" type="password" autocomplete="current-password"></label>
+        {{if $d.HasSSHCredentials}}<label class="check"><input type="checkbox" name="ssh_clear_login" value="1"> {{.T "devices.ssh_clear_login"}}</label>{{end}}
+      </div>
+    </fieldset>
+    <div class="actions"><button type="submit">{{.T "action.save"}}</button></div>
+  </form>
+  <p class="small muted">{{.T "devices.ssh_hostkey"}}: {{if $d.SSHHostKey}}<code class="fingerprint">{{$d.SSHHostKey}}</code>{{else}}{{.T "devices.ssh_hostkey_none"}}{{end}}</p>
+  {{if $d.SSHHostKey}}<form method="post" action="/admin/devices/{{$d.ID}}/ssh/hostkey/clear" class="actions">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <button type="submit" class="danger" data-confirm="{{.T "devices.ssh_hostkey_clear_confirm"}}">{{.T "devices.ssh_hostkey_clear"}}</button>
+  </form>{{end}}
+  <p class="small muted">{{.T "devices.ssh_hint"}}</p>
+</section>
+{{end}}
 {{if .Data.Configure}}
 <section class="card config-snmp-write">
   <h3>{{.T "devices.snmp_write"}}</h3>

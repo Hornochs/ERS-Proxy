@@ -19,6 +19,7 @@
           <span class="device-actions">
             <a class="icon-link" href="{{.Href}}" target="_blank" rel="noopener noreferrer" data-open-as="tab" title="{{$.T "ws.open_tab"}}" aria-label="{{$.T "ws.open_tab"}}">↗</a>
             <a class="icon-link" href="{{.Href}}" data-open-as="window" data-id="{{.ID}}" title="{{$.T "ws.open_window"}}" aria-label="{{$.T "ws.open_window"}}">⊡</a>
+            {{if and $.Data.SSH .SSHEnabled}}<a class="icon-link ssh-open" href="/ssh/{{.ID}}" data-ssh="{{.ID}}" data-name="{{.Name}} · SSH" title="{{$.T "ssh.open"}}" aria-label="{{$.T "ssh.open"}}">›_</a>{{end}}
             {{if $.Can "admin"}}<a class="icon-link" href="/admin/devices/{{.ID}}/edit" title="{{$.T "action.edit"}}" aria-label="{{$.T "action.edit"}}">✎</a>{{end}}
           </span>
         </li>

@@ -62,6 +62,8 @@ type Config struct {
 	Monitor Monitor `yaml:"monitor"`
 	// Configure controls changing switch settings from the dashboard.
 	Configure Configure `yaml:"configure"`
+	// SSH controls the browser SSH console.
+	SSH SSH `yaml:"ssh"`
 
 	// dir is the directory of the loaded file; relative paths resolve against it.
 	dir string
@@ -127,6 +129,18 @@ type Configure struct {
 	Enabled bool `yaml:"enabled"`
 	// ConfirmTimeout is how long a change waits for confirmation before it is reverted.
 	ConfirmTimeout time.Duration `yaml:"confirm_timeout"`
+}
+
+// SSH controls the browser SSH console (admins only).
+type SSH struct {
+	// Enabled allows admins to open SSH consoles on devices. Off by default; only config.yaml can turn it on (no environment variable).
+	Enabled bool `yaml:"enabled"`
+	// IdleTimeout ends a console without input or output for this long.
+	IdleTimeout time.Duration `yaml:"idle_timeout"`
+	// ConnectTimeout bounds connecting, the SSH handshake and the login.
+	ConnectTimeout time.Duration `yaml:"connect_timeout"`
+	// MaxSessions is the most consoles open at the same time (all users).
+	MaxSessions int `yaml:"max_sessions"`
 }
 
 // Monitor configures port monitoring.
@@ -207,6 +221,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Configure.ConfirmTimeout == 0 {
 		c.Configure.ConfirmTimeout = 2 * time.Minute
+	}
+	if c.SSH.IdleTimeout == 0 {
+		c.SSH.IdleTimeout = 15 * time.Minute
+	}
+	if c.SSH.ConnectTimeout == 0 {
+		c.SSH.ConnectTimeout = 15 * time.Second
+	}
+	if c.SSH.MaxSessions == 0 {
+		c.SSH.MaxSessions = 10
 	}
 	if c.Monitor.Retention.Minute == 0 {
 		c.Monitor.Retention.Minute = 48 * time.Hour
@@ -305,6 +328,15 @@ func (c *Config) Validate() error {
 	if c.Configure.ConfirmTimeout < 30*time.Second || c.Configure.ConfirmTimeout > 30*time.Minute {
 		errs = append(errs, errors.New("configure.confirm_timeout must be between 30s and 30m"))
 	}
+	if c.SSH.IdleTimeout < time.Minute || c.SSH.IdleTimeout > 24*time.Hour {
+		errs = append(errs, errors.New("ssh.idle_timeout must be between 1m and 24h"))
+	}
+	if c.SSH.ConnectTimeout < time.Second || c.SSH.ConnectTimeout > 2*time.Minute {
+		errs = append(errs, errors.New("ssh.connect_timeout must be between 1s and 2m"))
+	}
+	if c.SSH.MaxSessions < 1 || c.SSH.MaxSessions > 1000 {
+		errs = append(errs, errors.New("ssh.max_sessions must be between 1 and 1000"))
+	}
 	r := c.Monitor.Retention
 	if r.Minute < time.Hour {
 		errs = append(errs, errors.New("monitor.retention.minute must be at least 1h"))
@@ -399,6 +431,15 @@ monitor:
 # configure:
 #   enabled: false
 #   confirm_timeout: 2m       # a change is reverted unless confirmed (30s to 30m)
+
+# SSH console in the browser (admins only). Off; can only be enabled here,
+# explicitly: no environment variable turns it on. Devices also need SSH
+# turned on in their settings.
+# ssh:
+#   enabled: false
+#   idle_timeout: 15m         # end a console without input or output (1m to 24h)
+#   connect_timeout: 15s      # connect, handshake and login (1s to 2m)
+#   max_sessions: 10          # consoles open at the same time, all users
 
 # Built-in TLS (otherwise use a reverse proxy):
 # tls:

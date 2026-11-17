@@ -389,3 +389,12 @@ svg.chart .hover-dot-out { fill: var(--c-out); stroke: var(--surface); stroke-wi
 #bulk-rows th:nth-child(3) { width: 24%; }
 #bulk-rows th:nth-child(4) { width: 14%; }
 #bulk-rows th:nth-child(5) { width: 8%; }
+
+/* SSH console */
+.ssh { display: flex; flex-direction: column; height: 100vh; }
+.ssh-bar { display: flex; gap: .75rem; align-items: center; padding: .4rem .75rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ssh-status { font-size: .85rem; }
+.ssh-status.err { color: var(--err); }
+.ssh-panel { margin: 1rem; max-width: 48rem; }
+.ssh-term { flex: 1; min-height: 0; padding: .25rem; background: #000; }
+.ssh [hidden] { display: none !important; }

@@ -129,6 +129,22 @@ Other ERS families with the same EDM (Ext JS 2.2) – for example ERS 3500, 4000
 versions, so they apply wherever the affected code appears. Please report results with the
 "Device report" issue template.
 
+## SSH console
+
+| Device | SSH server offers | Profile | Status |
+|---|---|---|---|
+| ERS 5632FD, 6.6.3.015 | key exchange only `diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1`; host key `ssh-rsa` (SHA-1 signature) | `compat` (`auto` falls back) | works (2026-11-16, Chromium; then still with `legacy`, which the switch does not need): group14-sha1, `ssh-rsa`, `aes128-ctr`, `hmac-sha1`; stored web login; banner, Ctrl-Y, `show sys-info`, `logout` |
+| VSP 4850GTS, VOSS 7.1.10.0 | key exchange only `diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1` | `compat` | connection and host key verified (2026-11-16); login not yet (the tried account was rejected) |
+| VSP 8404, VOSS 8.10.1.0 | host key only `ssh-rsa`, `ssh-dss` | `compat` | connection and host key verified (2026-11-16); login not yet (the tried account was rejected) |
+| Other ERS 5600 units and firmware | as above, some with only `ssh-dss` host keys (OpenSSH needs `-oHostKeyAlgorithms=+ssh-dss`) | `legacy` | `ssh-dss` verified against a fake device only |
+| Very old ERS firmware | as above, MAC only `hmac-md5` | `legacy` | HMAC-MD5 tested against a fake device; no such switch at hand |
+| MikroTik CRS310-8G+2S+, RouterOS 7.25.1 | current algorithms | `modern` | works (2026-11-16, Chromium): negotiated `mlkem768x25519-sha256`, `rsa-sha2-256`, `aes128-gcm@openssh.com`; stored web login; `/system resource print`, `/quit` |
+| Others | current algorithms | `modern` | – |
+
+The ERS CLI starts with a banner and "Enter Ctrl-Y to begin"; press Ctrl-Y in the console.
+VOSS uses separate SSH accounts (store an SSH login of its own); ERS and RouterOS accept the
+web login. If a device offers no algorithm ERS-Proxy supports, the console names both lists.
+
 ## Port dashboard drivers
 
 The port dashboard picks a driver from `sysObjectID` (highest match wins; `generic` is the

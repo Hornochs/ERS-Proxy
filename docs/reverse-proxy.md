@@ -40,6 +40,20 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_read_timeout 90s;
     }
+
+    # SSH console (only with ssh.enabled): WebSocket, long-lived.
+    location ~ ^/ssh/[0-9]+/ws$ {
+        proxy_pass http://127.0.0.1:9050;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
 }
 
 server {
@@ -53,6 +67,11 @@ Proxy tokens appear in request paths (`/d/<token>/…`). They are short-lived an
 login session; still, consider shortening access-log retention or logging `$uri` without the
 token for `/d/` locations.
 
+The SSH console (`ssh.enabled`) uses a WebSocket below `/ssh/<id>/ws`. Without the second
+`location` Nginx answers the upgrade with `426 Upgrade Required` and the console shows
+"Cannot connect". ERS-Proxy pings every console every 30 seconds, so the read timeout only has
+to be longer than that; 3600 s also covers slow networks.
+
 ## Caddy
 
 ```caddyfile
@@ -63,6 +82,8 @@ ers.example.org {
     reverse_proxy 127.0.0.1:9050
 }
 ```
+
+Caddy passes WebSockets (SSH console) through without further settings.
 
 ## Apache
 
@@ -76,8 +97,12 @@ ers.example.org {
     ProxyPass        / http://127.0.0.1:9050/
     ProxyPassReverse / http://127.0.0.1:9050/
     RequestHeader set X-Forwarded-Proto "https"
+    # SSH console (ssh.enabled): WebSocket; needs mod_proxy_wstunnel or Apache 2.4.47+
+    ProxyPass        / http://127.0.0.1:9050/ upgrade=websocket
 </VirtualHost>
 ```
+
+With the SSH console, use the `ProxyPass` line with `upgrade=websocket` instead of the first one.
 
 ## Without a reverse proxy
 

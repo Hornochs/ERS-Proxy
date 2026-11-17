@@ -24,6 +24,7 @@ import (
 	"github.com/lan-dot-party/ers-proxy/internal/app"
 	"github.com/lan-dot-party/ers-proxy/internal/auth"
 	"github.com/lan-dot-party/ers-proxy/internal/config"
+	"github.com/lan-dot-party/ers-proxy/internal/devices"
 	"github.com/lan-dot-party/ers-proxy/internal/snmp"
 	"github.com/lan-dot-party/ers-proxy/internal/store"
 	"github.com/lan-dot-party/ers-proxy/internal/upstream"
@@ -66,6 +67,9 @@ type Server struct {
 	// Configure changes switch settings; nil unless configure.enabled is set
 	// in config.yaml (see configure.go).
 	Configure Configurator
+	// SSH is the SSH console; nil unless ssh.enabled is set in config.yaml
+	// (then no console route exists).
+	SSH *SSHConsole
 	// Diagnostics renders extra rows on the diagnostics page; optional.
 	Diagnostics func(d *store.Device) []DiagRow
 	// OnDeviceChange is called after a device was changed or deleted (the
@@ -85,7 +89,7 @@ type DiagRow struct {
 
 var pageFiles = []string{
 	"login", "workspace", "account", "error", "trust", "dashboard",
-	"devices", "device_form", "device_bulk", "groups", "users", "audit", "diagnostics", "switch", "port", "config_preview",
+	"devices", "device_form", "device_bulk", "groups", "users", "audit", "diagnostics", "switch", "port", "config_preview", "ssh",
 }
 
 // New parses all templates.
@@ -114,7 +118,9 @@ var funcs = template.FuncMap{
 	"deviceKinds": func() []string {
 		return []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindSwOS, store.KindGWN, store.KindRouterOS, store.KindLink}
 	},
-	"tlsModes": func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
+	"sshSupported":    devices.SSHSupported,
+	"sshDefaultLogin": devices.DefaultSSHLogin,
+	"tlsModes":        func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
 	"monitorSources": func() []string {
 		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN, store.MonitorRouterOS}
 	},
@@ -192,6 +198,13 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/dashboard/{id}/configure/apply", s.configApply)
 				r.Post("/dashboard/{id}/configure/{change}/confirm", s.configConfirm)
 				r.Post("/dashboard/{id}/configure/{change}/revert", s.configRevert)
+			}
+			if s.SSH != nil { // without it none of these exists (404)
+				r.Get("/ssh/{id}", s.sshPage)
+				r.Get("/ssh/{id}/ws", s.sshWS)
+				r.Post("/ssh/{id}/hostkey", s.sshTrust)
+				r.Post("/admin/devices/{id}/ssh", s.deviceSSH)
+				r.Post("/admin/devices/{id}/ssh/hostkey/clear", s.deviceSSHHostKeyClear)
 			}
 		})
 	})
