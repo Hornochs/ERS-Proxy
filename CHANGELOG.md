@@ -32,6 +32,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   upload the background and draw or hide links (audit `map.*`). Maps also open as workspace
   tabs. New migration `00006_maps.sql`.
 - The body of state-changing UI requests is capped at 16 MiB.
+- MAC address table: entries with status invalid, self or mgmt, multicast and zero addresses are
+  ignored; BRIDGE-MIB is used when Q-BRIDGE reports unknown bridge ports (TP-Link JetStream);
+  without `dot1dBasePortIfIndex` the bridge port is taken as ifIndex. Rules taken from LANLeecher.
 - Groundwork for the network map (phase 10): LLDP chassis IDs (the device's own and its
   neighbours', plus the neighbour's management address) and base bridge MAC in the snapshot;
   collection of the learned MAC address table (FDB), at most every 5 minutes per device, also

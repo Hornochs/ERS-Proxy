@@ -202,13 +202,20 @@ Groundwork for a network map.
   its chassis ID (`lldpRemChassisId`) and its first IPv4 management address (from the index
   of `lldpRemManAddrTable`). MAC addresses are always lower-case `aa:bb:cc:dd:ee:ff`; chassis
   IDs of another subtype are shown as text (or as a MAC when they are six raw bytes).
-- **MAC address table (FDB).** `dot1qTpFdbPort` (VLAN ID = fdbId) or, if that is empty,
-  `dot1dTpFdbPort`; bridge ports are mapped to ifIndex, entries on unknown ports are dropped,
-  at most 20000 entries are kept (a note says so). The poller reads the table at most every
+- **MAC address table (FDB).** `dot1qTpFdbPort` (VLAN ID = fdbId) and, when that is empty or
+  has entries on bridge ports that `dot1dBasePortIfIndex` does not list, `dot1dTpFdbPort`; the
+  table with fewer unknown ports wins (TP-Link JetStream reports port numbers in Q-BRIDGE but
+  ifIndexes in the bridge port table). Entries with status invalid, self or mgmt
+  (`dot1q/dot1dTpFdbStatus`), multicast and all-zero addresses are left out. Without
+  `dot1dBasePortIfIndex` the bridge port is taken as ifIndex when the switch has that
+  interface. These rules come from LANLeecher's FDB reader, which was checked on hardware. At
+  most 20000 entries are kept (a note says so). The poller reads the table at most every
   5 minutes per device and keeps the last one in the snapshots of the polls in between
   (`Snapshot.FDBTime` says when it was read). An error only adds a note. On RouterOS (REST
   source) it comes from `interface/bridge/host` (read-only GET, entries of the bridge itself
-  are left out). SwOS and EDM do not provide it yet.
+  are left out). Not available: SwOS and EDM (not yet), Grandstream GWN (its SNMP agent has no
+  forwarding table; the table exists only in its web interface), and Cisco only for VLAN 1
+  (per-VLAN tables need `community@vlan`, which is not read).
 - **Sources.** SNMP: all objects above. RouterOS REST: neighbour MAC from `/ip/neighbor`
   as chassis ID (subtype 4), FDB from the bridge host table. GWN web: the neighbour's chassis
   ID.

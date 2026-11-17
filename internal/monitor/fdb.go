@@ -28,56 +28,52 @@ type FDBEntry struct {
 	IfIndex int
 }
 
-// fdb reads dot1qTpFdbPort (index fdbId.mac, fdbId taken as VLAN ID) and, when
-// that is empty, dot1dTpFdbPort (index mac). Failures only add a note.
+// FDB entry status values (dot1qTpFdbStatus / dot1dTpFdbStatus) that are
+// not addresses learned from the network: invalid, the switch's own address
+// and management (static) entries.
+const (
+	fdbStatusInvalid = 2
+	fdbStatusSelf    = 4
+	fdbStatusMgmt    = 5
+)
+
+// fdbTable is what one of the two address tables gave.
+type fdbTable struct {
+	entries  []FDBEntry
+	unmapped int // entries on bridge ports that dot1dBasePortIfIndex does not list
+	err      error
+}
+
+// fdb reads dot1qTpFdbPort (index fdbId.mac, fdbId taken as VLAN ID) and
+// dot1dTpFdbPort (index mac). Q-BRIDGE is used unless it is empty or has
+// entries on unknown bridge ports; then BRIDGE-MIB is read as well and the
+// table with fewer unknown ports wins (TP-Link JetStream reports port numbers
+// in Q-BRIDGE but ifIndexes in dot1dBasePortIfIndex). Failures only add a note.
+// The rules follow LANLeecher's FDB reader, which was checked on hardware.
 func (b *Base) fdb(ctx context.Context, r Reader) {
-	var entries []FDBEntry
-	ok := false
-	for _, col := range []string{"dot1qTpFdbPort", "dot1dTpFdbPort"} {
-		t, err := r.Columns(ctx, col)
-		if err != nil {
-			b.Snap.Notes = append(b.Snap.Notes, "MAC address table: "+err.Error())
-			continue
+	q := b.fdbTable(ctx, r, "dot1qTpFdbPort", "dot1qTpFdbStatus")
+	best := q
+	if q.err != nil || len(q.entries) == 0 || q.unmapped > 0 {
+		d := b.fdbTable(ctx, r, "dot1dTpFdbPort", "dot1dTpFdbStatus")
+		qOK := q.err == nil && len(q.entries) > 0
+		if d.err == nil && len(d.entries) > 0 && (!qOK || d.unmapped < q.unmapped) {
+			best = d
+		} else if !qOK && q.err != nil && d.err == nil {
+			best = d // Q-BRIDGE failed, BRIDGE-MIB answered (maybe empty)
 		}
-		ok = true
-		for idx, row := range t {
-			parts := Ints(idx)
-			vlan := 0
-			if col == "dot1qTpFdbPort" {
-				if len(parts) != 7 {
-					continue
-				}
-				vlan, parts = parts[0], parts[1:]
+		for _, t := range []fdbTable{q, d} {
+			if t.err != nil {
+				b.Snap.Notes = append(b.Snap.Notes, "MAC address table: "+t.err.Error())
 			}
-			if len(parts) != 6 {
-				continue
-			}
-			mac := make([]byte, 6)
-			valid := true
-			for i, x := range parts {
-				if x < 0 || x > 255 {
-					valid = false
-					break
-				}
-				mac[i] = byte(x)
-			}
-			bp, has := row[col].AsInt()
-			if !valid || !has {
-				continue
-			}
-			ifIndex, known := b.BridgePorts[bp]
-			if !known {
-				continue
-			}
-			entries = append(entries, FDBEntry{MAC: FormatMAC(mac), VLAN: vlan, IfIndex: ifIndex})
 		}
-		if len(entries) > 0 {
-			break
+		if q.err != nil && d.err != nil {
+			return
 		}
 	}
-	if !ok {
-		return
+	if best.unmapped > 0 {
+		b.Snap.Notes = append(b.Snap.Notes, fmt.Sprintf("MAC address table: %d entries on unknown bridge ports ignored", best.unmapped))
 	}
+	entries := best.entries
 	sort.Slice(entries, func(i, j int) bool {
 		a, c := entries[i], entries[j]
 		if a.MAC != c.MAC {
@@ -94,4 +90,56 @@ func (b *Base) fdb(ctx context.Context, r Reader) {
 	}
 	b.Snap.FDB = entries
 	b.Snap.FDBTime = b.Snap.Time
+}
+
+// fdbTable reads one address table. Entries with status invalid, self or
+// mgmt, multicast and all-zero addresses are left out. A bridge port is
+// mapped through dot1dBasePortIfIndex; when the switch has no such table, the
+// bridge port is taken as ifIndex if the switch has that interface.
+func (b *Base) fdbTable(ctx context.Context, r Reader, portCol, statusCol string) fdbTable {
+	t, err := r.Columns(ctx, portCol, statusCol)
+	if err != nil {
+		return fdbTable{err: err}
+	}
+	var out fdbTable
+	for idx, row := range t {
+		parts := Ints(idx)
+		vlan := 0
+		if portCol == "dot1qTpFdbPort" {
+			if len(parts) != 7 {
+				continue
+			}
+			vlan, parts = parts[0], parts[1:]
+		}
+		if len(parts) != 6 {
+			continue
+		}
+		mac := make([]byte, 6)
+		valid, zero := true, true
+		for i, x := range parts {
+			if x < 0 || x > 255 {
+				valid = false
+				break
+			}
+			mac[i] = byte(x)
+			zero = zero && x == 0
+		}
+		bp, has := row[portCol].AsInt()
+		if !valid || zero || mac[0]&1 == 1 || !has || bp == 0 {
+			continue
+		}
+		if st, ok := row[statusCol].AsInt(); ok && (st == fdbStatusInvalid || st == fdbStatusSelf || st == fdbStatusMgmt) {
+			continue
+		}
+		ifIndex, known := b.BridgePorts[bp]
+		if !known {
+			if len(b.BridgePorts) > 0 || b.Snap.Port(bp) == nil {
+				out.unmapped++
+				continue
+			}
+			ifIndex = bp
+		}
+		out.entries = append(out.entries, FDBEntry{MAC: FormatMAC(mac), VLAN: vlan, IfIndex: ifIndex})
+	}
+	return out
 }

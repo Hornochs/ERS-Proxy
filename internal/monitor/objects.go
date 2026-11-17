@@ -71,6 +71,9 @@ var Objects = map[string]string{
 	// by fdbId.MAC (the bridge port number is the value).
 	"dot1dTpFdbPort": "1.3.6.1.2.1.17.4.3.1.2",
 	"dot1qTpFdbPort": "1.3.6.1.2.1.17.7.1.2.2.1.2",
+	// Their status: 3 learned, 2 invalid, 4 self, 5 mgmt (static).
+	"dot1dTpFdbStatus": "1.3.6.1.2.1.17.4.3.1.3",
+	"dot1qTpFdbStatus": "1.3.6.1.2.1.17.7.1.2.2.1.3",
 
 	// TPLINK-DOT1Q-VLAN-MIB (JetStream/Omada switches without Q-BRIDGE); names
 	// are ERS-Proxy's own. Port table index = ifIndex, VLAN table index = VLAN ID.
