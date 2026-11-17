@@ -3,8 +3,9 @@
 _Status: in progress on the branch `switch-config`. Steps 8.2–8.10 are implemented and run end
 to end against the mock switch (preview, apply, confirm, revert, automatic revert after the
 deadline). 8.1 (recording) is done on a VSP 8404 with VOSS 8.10.1.0 (2026-11-06), which also
-verified 8.6 (EDM writer) on hardware. 8.11 (hardware test) has a first run over the EDM
-channel on the same switch; open: the SNMP channel and VOSS 7.1 (checklist: section 9 of
+verified 8.6 (EDM writer) on hardware. 8.11 (hardware test) passed over the EDM channel on the
+same switch and on a VSP 4850GTS with VOSS 7.1.10.0 (2026-11-17: same write recipes, save with
+`rcSysActionL1`); open: the SNMP channel (checklist: section 9 of
 [hardware-tests.md](hardware-tests.md)). 8.12 (documentation and rules) is done. Without
 `configure.enabled: true` in `config.yaml` none of it is active._
 

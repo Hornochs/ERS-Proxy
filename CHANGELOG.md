@@ -108,6 +108,27 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Docker Compose examples (`compose.yaml` with a named volume, `compose.bind.yaml` with a local
   data directory), documented in `docs/installation.md`, and a CI workflow that starts both
   and checks health and write access.
+- MAC address table over EDM, for the network map's FDB links of switches monitored over EDM:
+  `dot1qTpFdbTable`/`dot1dTpFdbTable` on ERS, `rcBridgeTpFdbTable` on VOSS (also read over
+  SNMP when the standard tables are empty). Checked on an ERS 5632FD, a VSP 4850GTS and a
+  VSP 8404.
+- `ers-proxy snmp-test <id> --collect --fdb` prints the device's own MACs and its address
+  table (read-only), to check the map's links against the cabling.
+
+### Fixed
+
+- Network map: switches that other switches know only by their port or VLAN interface MACs
+  were not recognised in the address tables, so several switches behind one port were all
+  drawn as linked to it (seen on a VSP with three TP-Links behind one port). The poller now
+  reads the interface MACs with the address table, and a switch on the same port that has
+  both ends on different ports of its own shadows the farther one, also when the farther one
+  has no address table.
+- TP-Link T1500G-8T: the MAC address table stayed empty (its `dot1dTpFdbTable` is indexed by
+  VLAN and MAC); a walk the agent answers out of order is tried once more.
+- EDM data source: the chassis ID and base MAC were kept as `0x…` text, so the map could not
+  identify such switches by MAC. An all-zero base MAC (VOSS 7.1) now counts as none.
+- "Open in EDM" for a port did nothing on ERS ports that are not copper ports: EDM names SFP,
+  XFP, PoE and rear ports `Gbic_Port_`, `Fiber_Port_`, `Poe_Port_` and `Rear_Port_`.
 
 ## [1.1.0] - 2026-11-07
 

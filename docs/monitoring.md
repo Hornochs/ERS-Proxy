@@ -163,11 +163,19 @@ Groundwork for a network map.
   with its subtype) and the base bridge MAC (`dot1dBaseBridgeAddress`). Every neighbour has
   its chassis ID (`lldpRemChassisId`) and its first IPv4 management address (from the index
   of `lldpRemManAddrTable`). MAC addresses are always lower-case `aa:bb:cc:dd:ee:ff`; chassis
-  IDs of another subtype are shown as text (or as a MAC when they are six raw bytes).
+  IDs of another subtype are shown as text (or as a MAC when they are six raw bytes). With
+  the address table the poller also reads the interface MACs (`ifPhysAddress`,
+  `Snapshot.OwnMACs`): switches send frames from port and VLAN interface MACs, so other
+  switches learn those rather than the chassis ID (VSP 4850GTS, 2026-11-17). An all-zero base
+  MAC (VOSS 7.1) counts as none.
 - **MAC address table (FDB).** `dot1qTpFdbPort` (VLAN ID = fdbId) and, when that is empty or
   has entries on bridge ports that `dot1dBasePortIfIndex` does not list, `dot1dTpFdbPort`; the
   table with fewer unknown ports wins (TP-Link JetStream reports port numbers in Q-BRIDGE but
-  ifIndexes in the bridge port table). Entries with status invalid, self or mgmt
+  ifIndexes in the bridge port table; the T1500G-8T indexes `dot1dTpFdbTable` by VLAN and MAC
+  like Q-BRIDGE, which is accepted). When both have no entries, RAPID-CITY's
+  `rcBridgeTpFdbPort` (index VLAN.MAC, the value is an ifIndex) is read: VOSS's EDM serves
+  only that one. A walk the agent answers out of order (seen on the T1500G while its table
+  changes) is tried once more. Entries with status invalid, self or mgmt
   (`dot1q/dot1dTpFdbStatus`), multicast and all-zero addresses are left out. Without
   `dot1dBasePortIfIndex` the bridge port is taken as ifIndex when the switch has that
   interface. These rules come from LANLeecher's FDB reader, which was checked on hardware. At
@@ -175,18 +183,24 @@ Groundwork for a network map.
   5 minutes per device and keeps the last one in the snapshots of the polls in between
   (`Snapshot.FDBTime` says when it was read). An error only adds a note. On RouterOS (REST
   source) it comes from `interface/bridge/host` (read-only GET, entries of the bridge itself
-  are left out). Not available: SwOS and EDM (not yet), and Cisco only for VLAN 1
-  (per-VLAN tables need `community@vlan`, which is not read).
-- **Sources.** SNMP: all objects above. RouterOS REST: neighbour MAC from `/ip/neighbor`
-  as chassis ID (subtype 4), FDB from the bridge host table.
-- **Topology** (`internal/topology`). Devices are identified by chassis ID and base MAC, else
-  by name or sysName. An LLDP neighbour gives a link; the far port is found by the port ID or
+  are left out). Over EDM (checked 2026-11-17): the ERS 5632FD answers `dot1qTpFdbTable`
+  and `dot1dTpFdbTable` when the index comes as `indexNA`; VOSS 7.1 and 8.10 answer
+  `rcBridgeTpFdbTable`. Not available: SwOS (not yet), and Cisco only for VLAN 1 (per-VLAN
+  tables need `community@vlan`, which is not read).
+- **Sources.** SNMP and EDM: all objects above (EDM answers the chassis ID and base MAC as
+  `0x…` text, which is decoded). RouterOS REST: neighbour MAC from `/ip/neighbor` as chassis
+  ID (subtype 4), FDB from the bridge host table.
+- **Topology** (`internal/topology`). Devices are identified by chassis ID and base MAC, then
+  by interface MACs that no other device lists, else by name or sysName. An LLDP neighbour gives a link; the far port is found by the port ID or
   description, else from the far device's own LLDP table. LAG members are replaced by the LAG
   interface, so a LAG is one link. For device pairs without an LLDP link, the FDB is used: a
   device A links to B when B's MAC is learned on a port of A (the port with the fewest MACs if
-  several), unless B lies behind another device on that port (an LLDP link on the same port,
-  or A and the other device both learned on the port where B sees A). The far port is where B
-  learned A's MAC.
+  several), unless B lies behind another device on that port (an LLDP link on the same port;
+  A and the other device both learned on the port where B sees A; or the other device has A
+  and B on different ports of its own, which also works when B has no address table). The far
+  port is where B learned A's MAC.
+- **Checking the links.** `ers-proxy snmp-test <id> --collect --fdb` prints a device's own
+  MACs and its address table (read-only), to compare the map with the cabling.
 
 ## Network maps
 

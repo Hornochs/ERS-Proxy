@@ -13,7 +13,7 @@ then update this file, `architecture.md` and the changelog (see [CLAUDE.md](../C
 
 ## Current status
 
-_Last updated: 2026-11-16_
+_Last updated: 2026-11-17_
 
 | Phase | State |
 |---|---|
@@ -23,27 +23,36 @@ _Last updated: 2026-11-16_
 | 3 – EDM proxy | done |
 | 4 – Health checks | done |
 | 5 – Auto-login (experimental) | done (mock only) |
-| 6 – Hardware and 1.0 | in progress (6.1 partly) |
+| 6 – Hardware and 1.0 | in progress (6.1 done except stacks and SNMPv3 authPriv, which were skipped; next 6.2) |
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, CRS310 with RouterOS; stacks pending) |
-| 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
-| 9 – SSH console | in progress (9.1–9.3 done; 9.4: ERS 5632FD and CRS310 verified, VSPs open) |
-| 10 – Network map | done (against the snmpsim demo devices; not yet checked on hardware) |
+| 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0 and a VSP 4850GTS with VOSS 7.1.10.0; open: SNMP channel; design in [switch-configuration.md](switch-configuration.md)) |
+| 9 – SSH console | in progress (9.1–9.3 done; 9.4: ERS 5632FD, CRS310 and VSP 4850GTS verified; VSP 8404 needs an SSH account) |
+| 10 – Network map | done (checked on the test network 2026-11-17: ERS 5632FD, two VSPs, three TP-Links, CRS310) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404 and a VSP 4850GTS); 9.1–9.3; 10.1–10.6.
 
-**Next:** 6.1 – remaining hardware checks: a stack (numbering of units 2–8), Firefox on a real
-ERS (verified against the mock and on the VSPs), and
-"Open in EDM" for a port on an ERS (verified on the VSP only), SNMPv3 with authPriv on a real
-switch (snmpsim cannot test it), see
-[hardware-tests.md](hardware-tests.md). Then 6.2.
+**Next:** 6.2 – hardening, documentation and security review, release 1.0.0. Skipped in 6.1 by
+the maintainer (2026-11-17): a stack (numbering of units 2–8) and SNMPv3 with authPriv on a
+real switch. Still open on hardware: the SNMP channel of 8.11 (needs a write community), the
+SSH login on the VSP 8404 (needs an SSH account) and the SwOS address table (CRS305 offline).
+
+**Verified on hardware (2026-11-17):** Firefox 153 on the real ERS 5632FD (embedded EDM,
+sandbox, export window, no requests outside `/d/`); "Open in EDM" for ERS ports 1/6 (SFP) and
+1/25 (XFP), which needed a fix (EDM names them `Gbic_Port_`/`Fiber_Port_`). SSH console on the
+VSP 4850GTS (`compat`, own login, `show sys-info`). 8.11 over the EDM channel on the VSP 4850GTS
+(VOSS 7.1.10.0): C.1–C.7, C.9, C.10 and a hybrid port, configuration saved on confirm. Network
+map on the test network: all LLDP links right; the FDB fallback drew three TP-Links behind one
+VSP port until interface MACs and a third shadow rule were added (one link remains, through an
+unmonitored switch). Address tables over EDM: ERS (`dot1q/dot1dTpFdbTable` with `indexNA`),
+VOSS 7.1 and 8.10 (`rcBridgeTpFdbTable`).
 
 **Phase 8 (branch `switch-config`):** 8.2–8.5 done, against the in-memory test switch.
 8.6 is done against the mock switch, 8.7 against snmpsim, 8.8–8.10 (wiring and web UI)
 end to end against the mock switch; 8.12 done. 8.1 (recording EDM's writes) is done on a
 VSP 8404 with VOSS 8.10.1.0 (2026-11-06), which also verified 8.6 on hardware. The first run of
-8.11 over the EDM channel passed C.1–C.10 on the same switch (C.8 n/a). Next: 8.11, SNMP channel
-(needs SNMP write credentials on the switch), then VOSS 7.1 (VSP 4850GTS) – checklist in
-section 9 of [hardware-tests.md](hardware-tests.md). ERS switches are not supported by the
+8.11 over the EDM channel passed C.1–C.10 on the same switch (C.8 n/a), and on a VSP 4850GTS
+with VOSS 7.1.10.0 on 2026-11-17. Next: 8.11, SNMP channel (needs SNMP write credentials on the
+switch) – checklist in section 9 of [hardware-tests.md](hardware-tests.md). ERS switches are not supported by the
 planner yet.
 
 **Verified on hardware (2026-11-16, step 7.17):** WebFig of the CRS310-8G+2S+ (RouterOS 7.25.1)
@@ -284,8 +293,8 @@ the branch `switch-config`.
 - **8.10 Web, write part.** Port and VLAN forms, confirm/revert banner (plain forms; the
   countdown in JavaScript). *Done.*
 - **8.11 Hardware test.** VSP only, both channels, unused ports and test VLANs. *Partly: EDM
-  channel on a VSP 8404 (VOSS 8.10.1.0), 2026-11-06, C.1–C.10 ok (C.8 n/a). Open: SNMP channel,
-  VOSS 7.1.*
+  channel on a VSP 8404 (VOSS 8.10.1.0), 2026-11-06, C.1–C.10 ok (C.8 n/a); on a VSP 4850GTS
+  (VOSS 7.1.10.0), 2026-11-17, the same (C.8 n/a) plus a hybrid port. Open: SNMP channel.*
 - **8.12 Documentation and rules.** security, monitoring, drivers, architecture, CLAUDE.md,
   README, CHANGELOG. *Done (threat T8 in security.md, planner guide in drivers.md, checklist
   section 9 in hardware-tests.md).*
@@ -309,8 +318,9 @@ WebSocket.
   against a fake ERS SSH server (legacy profile) in Chromium.*
 - **9.4 Hardware test.** ERS 5632FD (legacy algorithms), VSP 4850GTS and VSP 8404 (own
   login), CRS310 (web login): login and show commands only. See section 11 of
-  [hardware-tests.md](hardware-tests.md). *Partly: ERS 5632FD and CRS310 work (2026-11-16); both
-  VSPs connect with `compat`, their login is still to be tested with a working SSH account.*
+  [hardware-tests.md](hardware-tests.md). *Partly: ERS 5632FD and CRS310 work (2026-11-16), the VSP
+  4850GTS with its own login (2026-11-17); the VSP 8404 connects with `compat`, but no working SSH
+  account is stored (its web login is rejected over SSH).*
 
 ## Phase 10 – Network map
 
@@ -329,8 +339,8 @@ rates.
 - **10.5 Editor (admins).** Place nodes, choose the background, draw manual links, hide
   links. *Done.*
 - **10.6 Documentation and tests.** Handler tests (roles, upload validation, size), topology
-  table tests, browser test against the snmpsim demo devices. *Done.* Open: a check of the
-  LLDP/FDB links on real switches (read-only, needs approval); FDB from SwOS and EDM.
+  table tests, browser test against the snmpsim demo devices. *Done.* Checked on the test
+  network on 2026-11-17 (see "Current status"); FDB over EDM added. Open: FDB from SwOS.
 
 ## Later
 
