@@ -21,6 +21,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Add several devices at once** (`/admin/devices/bulk`, button "Add several" on the device
+  list): shared settings (type, group, monitoring, web login, SNMP access) and a table of
+  names and addresses, with paste from a spreadsheet. Everything is created atomically or
+  nothing; errors are shown per row. Duplicates within the input and devices that already
+  exist (same name and address) are rejected.
 - MikroTik devices with RouterOS 7 (verified read-only on a CRS310-8G+2S+, RouterOS 7.25.1):
   device kind `routeros` (the browser opens WebFig directly in a tab; the stored login is the
   web login), driver `routeros` (also over SNMP alone: ports, speed, PVID, LLDP, traffic) and

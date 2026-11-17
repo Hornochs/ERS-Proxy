@@ -219,11 +219,16 @@ func nullID(id int64) any {
 	return id
 }
 
-// CreateDevice inserts a device. Validation happens in internal/devices.
-func (db *DB) CreateDevice(ctx context.Context, d *Device) error {
+// execer is satisfied by *sql.DB and *sql.Tx.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// insertDevice inserts d and sets its ID and timestamps.
+func insertDevice(ctx context.Context, q execer, d *Device) error {
 	d.CreatedAt = Now()
 	d.UpdatedAt = d.CreatedAt
-	res, err := db.sql.ExecContext(ctx, `INSERT INTO devices (group_id, name, kind, url, open_mode, isolation, tls_mode,
+	res, err := q.ExecContext(ctx, `INSERT INTO devices (group_id, name, kind, url, open_mode, isolation, tls_mode,
 		tls_pin, tls_profile, credentials, auto_login, health_enabled, notes, sort, monitor_source, monitor_driver, monitor_interval, snmp_version, snmp_port,
 		snmp_credentials, config_source, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -235,6 +240,45 @@ func (db *DB) CreateDevice(ctx context.Context, d *Device) error {
 	}
 	d.ID, err = res.LastInsertId()
 	return err
+}
+
+// CreateDevice inserts a device. Validation happens in internal/devices.
+func (db *DB) CreateDevice(ctx context.Context, d *Device) error {
+	return insertDevice(ctx, db.sql, d)
+}
+
+// CreateDevices inserts several devices in one transaction: either all are
+// created or none. After a device is inserted (so it has its ID) prepare is
+// called; it may set Credentials and SNMPCredentials, which are then stored in
+// the same transaction (a stored login turns auto-login on for ers-edm and
+// vsp-edm devices, like SetDeviceCredentials).
+func (db *DB) CreateDevices(ctx context.Context, devs []*Device, prepare func(*Device) error) error {
+	tx, err := db.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, d := range devs {
+		d.Credentials, d.SNMPCredentials = nil, nil
+		if err := insertDevice(ctx, tx, d); err != nil {
+			return err
+		}
+		if prepare == nil {
+			continue
+		}
+		if err := prepare(d); err != nil {
+			return err
+		}
+		if d.Credentials == nil && d.SNMPCredentials == nil {
+			continue
+		}
+		d.AutoLogin = d.AutoLogin || (d.Credentials != nil && (d.Kind == KindERS || d.Kind == KindVSP))
+		if _, err := tx.ExecContext(ctx, `UPDATE devices SET credentials = ?, snmp_credentials = ?, auto_login = ? WHERE id = ?`,
+			d.Credentials, d.SNMPCredentials, boolInt(d.AutoLogin), d.ID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // UpdateDevice saves all editable fields except the credentials (login and

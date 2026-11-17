@@ -377,3 +377,15 @@ svg.chart .hover-dot-out { fill: var(--c-out); stroke: var(--surface); stroke-wi
 .config-apply { display: grid; gap: .75rem; }
 .config-vlans form.inline input { max-width: 16rem; }
 .config-history td.err { font-weight: normal; }
+
+/* Bulk add */
+.field-error { color: var(--err); font-size: .85rem; padding-top: 0; }
+#bulk-rows tbody.bulk-row td { border-bottom: 0; }
+#bulk-rows tbody.bulk-row { border-bottom: 1px solid var(--border); }
+#bulk-rows input, #bulk-rows select { width: 100%; }
+#bulk-rows { table-layout: fixed; width: 100%; }
+#bulk-rows th:nth-child(1) { width: 22%; }
+#bulk-rows th:nth-child(2) { width: 32%; }
+#bulk-rows th:nth-child(3) { width: 24%; }
+#bulk-rows th:nth-child(4) { width: 14%; }
+#bulk-rows th:nth-child(5) { width: 8%; }

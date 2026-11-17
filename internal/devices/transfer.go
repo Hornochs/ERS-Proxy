@@ -177,6 +177,12 @@ type ImportResult struct {
 	Errors        []string
 }
 
+// Key identifies a device by name (case-insensitive) and address; devices with
+// the same key count as the same device when importing or adding in bulk.
+func Key(name, url string) string {
+	return strings.ToLower(name) + "\x00" + url
+}
+
 // Import adds groups and devices. Devices with the same name and URL as an
 // existing one are skipped, so importing the same file twice is harmless.
 // Invalid rows are reported and skipped; valid rows are still imported.
@@ -216,7 +222,7 @@ func Import(ctx context.Context, db *store.DB, e *Export) (*ImportResult, error)
 	}
 	have := map[string]bool{}
 	for _, d := range devs {
-		have[strings.ToLower(d.Name)+"\x00"+d.URL] = true
+		have[Key(d.Name, d.URL)] = true
 	}
 	for i, ed := range e.Devices {
 		d := &store.Device{Name: ed.Name, Kind: ed.Kind, URL: ed.URL, OpenMode: ed.OpenMode, Isolation: ed.Isolation,
@@ -230,7 +236,7 @@ func Import(ctx context.Context, db *store.DB, e *Export) (*ImportResult, error)
 			res.Errors = append(res.Errors, "device "+strconv.Itoa(i+1)+" ("+ed.Name+"): "+err.Error())
 			continue
 		}
-		key := strings.ToLower(d.Name) + "\x00" + d.URL
+		key := Key(d.Name, d.URL)
 		if have[key] {
 			res.Skipped++
 			continue

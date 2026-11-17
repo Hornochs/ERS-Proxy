@@ -1,0 +1,106 @@
+{{define "content"}}
+{{$d := .Data.Device}}
+<h1>{{.T "bulk.title"}}</h1>
+<form method="post" action="/admin/devices/bulk" id="bulk-form">
+  <input type="hidden" name="_csrf" value="{{.CSRF}}">
+  <section class="card">
+    <h3>{{.T "bulk.shared"}}</h3>
+    <p class="muted small">{{.T "bulk.shared_hint"}}</p>
+    <div class="form-grid">
+      <label>{{.T "col.kind"}}
+        <select name="kind" id="bulk-kind">
+          {{range deviceKinds}}<option value="{{.}}"{{if eq . $d.Kind}} selected{{end}}>{{$.T (print "kind." .)}}</option>{{end}}
+        </select>
+      </label>
+      <label>{{.T "col.group"}}
+        <select name="group_id">
+          <option value="0">{{.T "ws.ungrouped"}}</option>
+          {{range .Data.Groups}}<option value="{{.ID}}"{{if eq .ID $d.GroupID}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </label>
+      <label>{{.T "col.open_mode"}}
+        <select name="open_mode">
+          <option value="inherit"{{if eq $d.OpenMode "inherit"}} selected{{end}}>{{.T "open.inherit"}}</option>
+          {{range openModes}}<option value="{{.}}"{{if eq . $d.OpenMode}} selected{{end}}>{{$.T (print "open." .)}}</option>{{end}}
+        </select>
+      </label>
+      <fieldset>
+        <legend>{{.T "devices.monitoring"}}</legend>
+        <label>{{.T "col.monitor_source"}}
+          <select name="monitor_source">
+            {{range $m := monitorSources}}<option value="{{$m}}"{{if eq $m $d.MonitorSource}} selected{{end}}>{{$.T (print "monitor.source." $m)}}</option>{{end}}
+          </select>
+        </label>
+        <label>{{.T "col.monitor_driver"}}
+          <select name="monitor_driver">
+            {{range $m := monitorDrivers}}<option value="{{$m}}"{{if eq $m $d.MonitorDriver}} selected{{end}}>{{$.T (print "monitor.driver." $m)}}</option>{{end}}
+          </select>
+        </label>
+        <label>{{.T "col.monitor_interval"}}<input name="monitor_interval" type="number" min="30" max="3600" value="{{$d.MonitorInterval}}" class="narrow"></label>
+        <label>{{.T "col.snmp_port"}}<input name="snmp_port" type="number" min="1" max="65535" value="{{$d.SNMPPort}}" class="narrow"></label>
+        <p class="muted small span-all">{{.T "devices.monitoring_hint"}}</p>
+      </fieldset>
+      <fieldset>
+        <legend>{{.T "devices.access_new"}}</legend>
+        <div class="form-grid span-all ers-only">
+          <h3 class="span-all">{{.T "devices.login_new"}}</h3>
+          <label>{{.T "login.username"}}<input name="login_username" maxlength="64" autocomplete="off"{{if eq .Data.ErrKey "login_missing"}} aria-invalid="true"{{end}}></label>
+          <label>{{.T "login.password"}}<input name="login_password" type="password" maxlength="64" autocomplete="new-password"{{if eq .Data.ErrKey "login_missing"}} aria-invalid="true"{{end}}></label>
+          <p class="small muted span-all">{{.T "devices.login_new_hint"}}</p>
+        </div>
+        <div class="form-grid span-all snmp-box snmp-{{$d.SNMPVersion}} snmp-level-authPriv">
+          <h3 class="span-all">{{.T "devices.snmp"}}</h3>
+          {{template "snmp_fields" .}}
+        </div>
+        <label>{{.T "devices.confirm_password"}}<input name="confirm_password" type="password" autocomplete="current-password"{{if eq .Data.ErrKey "wrong_password"}} aria-invalid="true"{{end}}></label>
+        <p class="small muted span-all">{{.T "devices.access_new_hint"}}</p>
+      </fieldset>
+      <label class="check"><input type="checkbox" name="health_enabled" value="1"{{if $d.HealthEnabled}} checked{{end}}> {{.T "devices.health"}}</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>{{.T "bulk.devices"}}</h3>
+    <p class="muted small">{{.T "bulk.hint"}}</p>
+    <div class="table-wrap">
+      <table id="bulk-rows">
+        <thead><tr><th>{{.T "col.name"}}</th><th>{{.T "col.address"}}</th><th>{{.T "col.kind"}}</th><th>{{.T "col.group"}}</th><th></th></tr></thead>
+        {{range .Data.Rows}}{{template "bulk_row" (dict "P" $ "Row" . "Groups" $.Data.Groups)}}{{end}}
+      </table>
+    </div>
+    <template id="bulk-row">{{template "bulk_row" (dict "P" . "Row" .Data.EmptyRow "Groups" .Data.Groups)}}</template>
+    <div class="actions">
+      <button type="button" id="bulk-add">{{.T "bulk.add_row"}}</button>
+    </div>
+  </section>
+  <div class="actions">
+    <button type="submit" class="primary">{{.T "bulk.create"}}</button>
+    <a class="button" href="/admin/devices">{{.T "action.cancel"}}</a>
+  </div>
+</form>
+{{end}}
+
+{{define "bulk_row"}}
+{{$row := .Row}}
+<tbody class="bulk-row">
+  <tr>
+    <td><input name="row_name" value="{{$row.Name}}" maxlength="80"{{if $row.Err}} aria-invalid="true"{{end}} aria-label="{{.P.T "col.name"}}"></td>
+    <td><input name="row_url" value="{{$row.URL}}" placeholder="https://192.0.2.10" aria-label="{{.P.T "col.address"}}"></td>
+    <td>
+      <select name="row_kind" aria-label="{{.P.T "col.kind"}}">
+        <option value="">{{.P.T "bulk.shared_option"}}</option>
+        {{range deviceKinds}}<option value="{{.}}"{{if eq . $row.Kind}} selected{{end}}>{{$.P.T (print "kind." .)}}</option>{{end}}
+      </select>
+    </td>
+    <td>
+      <select name="row_group" aria-label="{{.P.T "col.group"}}">
+        <option value=""{{if eq $row.Group ""}} selected{{end}}>{{.P.T "bulk.shared_option"}}</option>
+        <option value="0"{{if eq $row.Group "0"}} selected{{end}}>{{.P.T "ws.ungrouped"}}</option>
+        {{range .Groups}}<option value="{{.ID}}"{{if eq (print .ID) $row.Group}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </td>
+    <td><button type="button" class="link danger-text" data-bulk-remove>{{.P.T "bulk.remove"}}</button></td>
+  </tr>
+  {{if $row.Err}}<tr class="bulk-error"><td colspan="5" class="field-error" role="alert">{{$row.Err}}</td></tr>{{end}}
+</tbody>
+{{end}}

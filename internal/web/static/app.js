@@ -27,6 +27,70 @@
     sync();
   }
 
+  // Bulk add: shared kind select toggles the shared sections like the device form.
+  var bulkKind = document.getElementById("bulk-kind");
+  if (bulkKind) {
+    var bulkForm = document.getElementById("bulk-form");
+    var bulkSync = function () {
+      bulkForm.classList.toggle("device-kind-link", bulkKind.value === "link");
+    };
+    bulkKind.addEventListener("change", bulkSync);
+    bulkSync();
+  }
+
+  // Bulk add: table of devices. Rows are cloned from <template id="bulk-row">;
+  // pasting several lines (e.g. from a spreadsheet) into a name or address
+  // field fills the rows from there on.
+  var bulkRows = document.getElementById("bulk-rows");
+  var bulkTpl = document.getElementById("bulk-row");
+  if (bulkRows && bulkTpl) {
+    var bulkKinds = ["ers-edm", "vsp-edm", "edm-direct", "swos", "gwn", "routeros", "link"];
+    var rowList = function () { return bulkRows.querySelectorAll("tbody.bulk-row"); };
+    var addRow = function () {
+      var node = bulkTpl.content.firstElementChild.cloneNode(true);
+      bulkRows.appendChild(node);
+      return node;
+    };
+    document.getElementById("bulk-add").addEventListener("click", function () {
+      addRow().querySelector('input[name="row_name"]').focus();
+    });
+    bulkRows.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-bulk-remove]");
+      if (!btn) return;
+      var row = btn.closest("tbody.bulk-row");
+      if (rowList().length > 1) {
+        row.remove();
+      } else {
+        // keep at least one row: just empty it
+        Array.prototype.forEach.call(row.querySelectorAll("input"), function (i) { i.value = ""; });
+        Array.prototype.forEach.call(row.querySelectorAll("select"), function (i) { i.selectedIndex = 0; });
+        var err = row.querySelector(".bulk-error");
+        if (err) err.remove();
+      }
+    });
+    bulkRows.addEventListener("paste", function (e) {
+      var input = e.target;
+      if (!input.matches || !input.matches('input[name="row_name"], input[name="row_url"]')) return;
+      var text = (e.clipboardData || window.clipboardData || { getData: function () { return ""; } }).getData("text");
+      var lines = text.split(/\r\n|\r|\n/).filter(function (l) { return l.trim() !== ""; });
+      if (lines.length < 2) return; // single line: normal paste
+      e.preventDefault();
+      var row = input.closest("tbody.bulk-row");
+      lines.forEach(function (line, i) {
+        if (!row) row = addRow();
+        var cols = line.split(/\t|;|,/).map(function (c) { return c.trim(); });
+        row.querySelector('input[name="row_name"]').value = cols[0] || "";
+        row.querySelector('input[name="row_url"]').value = cols[1] || "";
+        if (cols[2] && bulkKinds.indexOf(cols[2]) >= 0) {
+          row.querySelector('select[name="row_kind"]').value = cols[2];
+        }
+        var err = row.querySelector(".bulk-error");
+        if (err) err.remove();
+        row = row.nextElementSibling;
+      });
+    });
+  }
+
   // SNMP access (edit page card and new-device form): show the fields of the
   // chosen version and security level.
   Array.prototype.forEach.call(document.querySelectorAll(".snmp-box"), function (box) {
