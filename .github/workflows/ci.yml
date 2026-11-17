@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install snmpsim (SNMP simulator for tests)
-        run: pip install snmpsim pysmi
+        run: pip install snmpsim==1.2.2 pysmi==2.0.0
       - name: Vet
         run: go vet ./...
       - name: Test (with race detector)

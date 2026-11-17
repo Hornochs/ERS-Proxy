@@ -15,6 +15,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A panic while polling one device, in the configuration revert loop, in the history maintenance
   or in a health check is now logged with a stack trace instead of ending the process; the
   other devices keep being polled.
+- Upper bounds for data from SNMP agents: a walk stops after 20000 rows, a device shows at most
+  2048 interfaces (ifIndex 1 to 65535), port bit lists longer than 1024 bytes are cut, and the
+  history recorder no longer keeps counters of ports that are gone.
+- The CSV device export protects cells that start with `=`, `+`, `-`, `@`, a tab or a carriage
+  return against formula injection in spreadsheets (a single quote is put in front; the CSV
+  import removes it again, so export and import round-trip).
+- Device import files larger than 4 MiB are refused with an error instead of being cut off and
+  imported partially (CSV, JSON, web form and `ers-proxy device import`).
+- Error texts that a switch sends back for a configuration write are cut to 1024 bytes before
+  they are stored in the change history and the audit log.
+- CI installs fixed versions of the SNMP simulator (`snmpsim` 1.2.2, `pysmi` 2.0.0).
 
 ### Removed
 
