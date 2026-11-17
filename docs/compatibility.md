@@ -58,41 +58,6 @@ portal. Differences to EDM:
   without Q-BRIDGE, MIKROTIK-MIB serial number, firmware version and SFP table. No VLANs, no
   EtherLike, no LLDP. `sysObjectID` is `1.3.6.1.4.1.14988.2`.
 
-## Grandstream switches (kind `gwn`)
-
-| Model | Firmware | Transport | Status | Verified how |
-|---|---|---|---|---|
-| GWN7721 (8 × 2.5G, 2 × SFP+) | 1.0.7.128 | HTTPS and HTTP | works (monitoring, read-only) | Hardware test 2026-11-06, read-only: SNMP and the `gwn` data source of the port dashboard (`grandstream` driver); ports, speed, VLAN membership (ports 3–8 tagged in VLAN 100, untagged in VLAN 1; port 2 PVID 100), PVID, LLDP neighbour and rates matched the switch's web interface; a poll takes about 2 s |
-| other GWN switches (GWN7720, GWN781x, PoE models such as GWN7721P) | 1.0.x | HTTPS and HTTP | expected to work | Same web API and SNMP agent family; PoE is not read, and on larger models `ifIndex` might differ from the port number |
-
-The kind `gwn` opens the switch's own web interface directly in a tab (like `edm-direct`, never
-framed); the server talks to the switch itself for the data source. Behaviour of the switch (seen
-on a GWN7721, firmware 1.0.7.128):
-
-- **A TCP reset on port 443 reboots the switch.** A single connection to the HTTPS port that
-  the client closes with a TCP reset (RST) restarts the whole switch (down about 50 s). A port
-  scan (nmap connect scan) triggers it reliably; a normal close (FIN), TLS handshakes and HTTP
-  on port 80 do not. The `gwn` client always reads answers to the end so that it never resets
-  a connection, ERS-Proxy's health check closes normally, and `http://` is recommended as the
-  device address (the web API is the same on port 80). **Do not run port scans against GWN
-  switches.** Still to be checked on a second unit (a hardware fault is not excluded) and
-  reported to Grandstream.
-- **One web session per account.** While someone is logged in to the web interface with the
-  same account, a login is refused ("user already logged in"). The client therefore logs in,
-  reads and logs out within each poll and treats "in use" and "locked" as temporary. A rejected
-  login is not retried until the stored login or address changes, because the switch locks the
-  account after several failed logins. A dedicated account for ERS-Proxy, if the switch offers
-  one, avoids collisions with administrators.
-- **SNMP drops requests with more than four variable bindings** (GET, GETNEXT and GETBULK),
-  without an answer. ERS-Proxy asks for at most four scalars per GET (all devices).
-- **SNMP agent:** system group, IF-MIB with 64-bit counters (`ifIndex` = port number),
-  BRIDGE-MIB, from Q-BRIDGE only the scalars and `dot1qPvid` (no VLAN table); no EtherLike,
-  LLDP, IEEE8023-LAG or POWER-ETHERNET. VLANs, duplex, LLDP and LAGs therefore need the `gwn`
-  data source. The web API has no byte counters, so traffic rates come from SNMP.
-- **Not verified on hardware:** LAGs (none configured), PoE models, larger GWN models, VLANs in
-  port-based mode (the web interface then shows no 802.1Q VLANs; the switch page says so).
-- Configuration changes (phase 8) are not supported for GWN.
-
 ## MikroTik devices with RouterOS (kind `routeros`)
 
 | Model | RouterOS | Transport | Status | Verified how |
@@ -160,7 +125,6 @@ fallback). All drivers are read-only.
 
 | `swos` | `1.3.6.1.4.1.14988.2` (MikroTik SwOS) or `sysDescr` containing `SwOS` | SNMP: IF-MIB and MIKROTIK-MIB serial/firmware; front-panel number = ifIndex. With the `swos` data source also VLANs, PVID, derived tagging, duplex and LAGs ("Trunk1"…) from SwOS's web API, served as Q-BRIDGE, EtherLike and IEEE8023-LAG objects | CRS305-1G-4S+ (SwOS 2.18) over SNMP and the SwOS data source: ports, speed, duplex, VLANs, PVID, traffic. LAG membership and the tagging of hybrid ports not yet seen on hardware |
 | `routeros` | `1.3.6.1.4.1.14988.1` (MikroTik RouterOS) or `sysDescr` starting with `RouterOS` (score 90) | SNMP: IF-MIB (64-bit counters), BRIDGE-MIB, LLDP, `dot1qPvid`, `mtxrSerialNumber`; front-panel number = position among the ethernet ports; model and RouterOS version from `sysDescr`. With the `routeros` data source also VLANs, names, tagging, duplex and bonds from the REST API | CRS310-8G+2S+ (RouterOS 7.25.1) over SNMP and the `routeros` data source: ports, speed, duplex, VLANs, PVID, tagging, LLDP, traffic. Bonds not yet seen on hardware |
-| `grandstream` | `1.3.6.1.4.1.42397` (bare enterprise OID, also prefix `1.3.6.1.4.1.42397.`) or `sysDescr` starting with `GWN` (score 90) | SNMP: IF-MIB (64-bit counters), `dot1qPvid`; front-panel number from `ifName` (`2.5GE1`, `SFP+10`: type prefix + number), unit 1; model and firmware from Grandstream scalars `1.3.6.1.4.1.42397.1.3.1.1`/`.1.3.1.4` (no public MIB); LAGs named `LAG<n>`. With the `gwn` data source also VLANs (egress/untagged bitmaps), names, duplex, LLDP neighbours, LAGs and the serial number from the switch's web API | GWN7721 (1.0.7.128) over SNMP and the `gwn` data source: ports, speed, VLANs, PVID, tagging, LLDP, rates. LAGs, PoE models and larger models not yet seen on hardware |
 
 Please attach `ers-proxy snmp-capture` output to a device report to get a driver verified.
 

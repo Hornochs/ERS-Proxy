@@ -24,7 +24,7 @@ _Last updated: 2026-11-16_
 | 4 – Health checks | done |
 | 5 – Auto-login (experimental) | done (mock only) |
 | 6 – Hardware and 1.0 | in progress (6.1 partly) |
-| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721, CRS310 with RouterOS; stacks pending) |
+| 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, CRS310 with RouterOS; stacks pending) |
 | 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
 | 9 – SSH console | in progress (9.1–9.3 done; 9.4: ERS 5632FD and CRS310 verified, VSPs open) |
 | 10 – Network map | done (against the snmpsim demo devices; not yet checked on hardware) |
@@ -57,16 +57,6 @@ API, because its SNMP agent has no VLAN table, duplex or bonds). SNMP and REST g
 ports (`ifIndex` = interface ID), speed and LLDP neighbour; the REST source also VLANs, tagging,
 PVID and duplex. Self-signed certificate pinned through the edit page; device form, dashboard
 and switch page checked in Chromium. Not seen on hardware: bonds, PoE, several bridges.
-
-**Verified on hardware (2026-11-06, step 7.15):** Grandstream GWN7721 (firmware 1.0.7.128),
-read-only. New device kind `gwn`, driver `grandstream` and data source `gwn` (the switch's web
-API plus SNMP); ports, VLANs, PVID, tagging, LLDP and rates match the switch's web interface.
-Findings: a TCP reset (RST) on the HTTPS port reboots the switch (a port scan triggers it;
-the client never resets, `http://` is recommended; to be checked on a second unit and reported
-to Grandstream); the switch allows one web session per account (a login is refused while
-someone else is logged in); its SNMP agent drops requests with more than four variable
-bindings (ERS-Proxy now asks for at most four per GET). Not seen on hardware: LAGs, PoE
-models.
 
 **Verified on hardware (2026-11-04, step 7.14):** MikroTik CRS305-1G-4S+ with SwOS 2.18, read-only.
 New device kind `swos` (web interface through the proxy, server-side HTTP Digest login), driver
@@ -250,10 +240,6 @@ Never write to a device: no SNMP sets, no EDM `setVariables`.
 - **7.14 MikroTik SwOS.** Device kind `swos` (web interface through the proxy, HTTP Digest login
   on the server), driver `swos`, data source `swos` (SwOS's web API for VLANs, duplex and LAGs).
   *Done: verified read-only on a CRS305-1G-4S+ (SwOS 2.18).*
-- **7.15 Grandstream GWN.** Device kind `gwn` (web interface opened directly in a tab), driver
-  `grandstream`, data source `gwn` (web API for VLANs, duplex, LLDP and LAGs, SNMP for
-  counters); SNMP GETs carry at most four objects. *Done: verified read-only on a GWN7721
-  (firmware 1.0.7.128).*
 - **7.16 MikroTik RouterOS.** Device kind `routeros` (WebFig opened directly in a tab), driver
   `routeros` (SNMP: `sysObjectID` .14988.1, ports by position), data source `routeros` (REST API
   of RouterOS 7: allow-listed GETs plus `/interface/ethernet/monitor` with `once`). *Done:
@@ -333,8 +319,7 @@ rates.
 
 - **10.1 Data collection.** LLDP chassis IDs and management addresses (`System.ChassisID`,
   `System.BaseMAC`, `Neighbor.ChassisID`, `Neighbor.MgmtAddr`), the learned MAC address table
-  (`Snapshot.FDB`, read at most every 5 minutes), RouterOS `interface/bridge/host`, GWN
-  neighbour chassis IDs, synthetic test data. *Done.*
+  (`Snapshot.FDB`, read at most every 5 minutes) and RouterOS `interface/bridge/host`, synthetic test data. *Done.*
 - **10.2 Topology.** `internal/topology`: pure function from snapshots to links (LLDP, FDB
   fallback). *Done.*
 - **10.3 Storage and background images.** Maps, node positions and background images in the

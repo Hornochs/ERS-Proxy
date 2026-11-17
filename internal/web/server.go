@@ -122,16 +122,16 @@ var funcs = template.FuncMap{
 	"hasPrefix": strings.HasPrefix,
 	"openModes": func() []string { return []string{config.OpenEmbedded, config.OpenTab, config.OpenWindow} },
 	"deviceKinds": func() []string {
-		return []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindSwOS, store.KindGWN, store.KindRouterOS, store.KindLink}
+		return []string{store.KindERS, store.KindVSP, store.KindEDMDirect, store.KindSwOS, store.KindRouterOS, store.KindLink}
 	},
 	"sshSupported":    devices.SSHSupported,
 	"sshDefaultLogin": devices.DefaultSSHLogin,
 	"tlsModes":        func() []string { return []string{store.TLSAuto, store.TLSModern, store.TLSLegacy} },
 	"monitorSources": func() []string {
-		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN, store.MonitorRouterOS}
+		return []string{store.MonitorNone, store.MonitorSNMP, store.MonitorEDM, store.MonitorSwOS, store.MonitorRouterOS}
 	},
 	"monitorDrivers": func() []string {
-		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS, store.DriverGWN, store.DriverRouterOS}
+		return []string{store.DriverAuto, store.DriverGeneric, store.DriverERS, store.DriverCisco, store.DriverTPLink, store.DriverVOSS, store.DriverSwOS, store.DriverRouterOS}
 	},
 	"snmpVersions":   func() []string { return snmp.Versions },
 	"securityLevels": func() []string { return snmp.SecurityLevels },

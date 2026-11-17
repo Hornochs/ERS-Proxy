@@ -13,6 +13,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   47 reachable standard-library vulnerabilities (`net/http`, `crypto/x509`) for the old
   toolchain and reports none now.
 
+### Removed
+
+- Grandstream GWN support (device kind `gwn`, data source `gwn`, driver `grandstream`): the
+  maintainer no longer has the hardware. A migration turns existing `gwn` devices into `link`
+  devices, which keep opening directly; their `gwn` data source and `grandstream` driver
+  settings are reset.
+
 ### Changed
 
 - Login lockout: 5 failures lock the pair of client address and username, 20 failures lock a

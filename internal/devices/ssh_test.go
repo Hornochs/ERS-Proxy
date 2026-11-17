@@ -42,7 +42,7 @@ func TestNormalizeSSH(t *testing.T) {
 
 func TestSSHLoginDefaults(t *testing.T) {
 	for kind, want := range map[string]string{store.KindERS: "web", store.KindRouterOS: "web", store.KindVSP: "own",
-		store.KindEDMDirect: "own", store.KindGWN: "ask", store.KindLink: "ask"} {
+		store.KindEDMDirect: "own", store.KindLink: "ask"} {
 		if got := SSHLogin(&store.Device{Kind: kind}); got != want {
 			t.Errorf("%s: %s, want %s", kind, got, want)
 		}

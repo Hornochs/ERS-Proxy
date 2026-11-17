@@ -37,8 +37,8 @@ In the device form (admin), section **Monitoring**:
 
 | Field | Meaning |
 |---|---|
-| Source | `none` (default), `snmp`, `edm`, `swos`, `gwn` or `routeros` (see below). |
-| Driver | `auto` detects the driver from `sysObjectID` once per polling loop; or fix `generic`, `ers`, `cisco`, `tplink`, `voss`, `swos`, `grandstream` or `routeros`. See [compatibility.md](compatibility.md). |
+| Source | `none` (default), `snmp`, `edm`, `swos` or `routeros` (see below). |
+| Driver | `auto` detects the driver from `sysObjectID` once per polling loop; or fix `generic`, `ers`, `cisco`, `tplink`, `voss`, `swos` or `routeros`. See [compatibility.md](compatibility.md). |
 | Interval | 30–3600 seconds, default 60. |
 | SNMP port | Port 161 by default. |
 
@@ -118,44 +118,6 @@ Verified on a CRS305-1G-4S+ with SwOS 2.18: ports, speed, duplex, VLANs, PVID an
 SNMP and SwOS's own pages. LAGs and PoE were not configured on the tested switch; PoE is not
 read.
 
-### GWN source (Grandstream)
-
-The SNMP agent of a Grandstream GWN switch (tested: GWN7721) has no VLAN table, no LLDP, no
-duplex and no LAGs. The source `gwn` reads them from the web API of the switch's own web
-interface and combines them with SNMP. It
-
-- works only for devices of kind `gwn` and needs the device's stored **web login**; the
-  address should be `http://` (see below);
-- sends only read commands from an allow-list (system information, ports, 802.1Q VLANs and
-  PVIDs, VLAN mode, LLDP neighbours) and POSTs only login and logout – never a setting and not
-  the configuration file (it contains secrets);
-- reads traffic counters, errors, discards and the time of the last change from SNMP: **store
-  SNMP credentials for the device**, otherwise there are no traffic rates (a note on the
-  switch page says so). A failing SNMP read becomes a note and does not fail the poll;
-- names ports like the web interface (`2.5GE1`, `SFP+10`; `ifAlias` = the port description)
-  and shows LAGs as "LAG1" …;
-- reads the VLANs in 802.1Q mode; with port-based VLANs the switch has no 802.1Q VLANs and a
-  note says so;
-- takes about 2 s per poll.
-
-The switch allows **one web session per account**: while an administrator is logged in to the
-web interface with the same account, ERS-Proxy's login is refused and that poll fails
-temporarily (next poll tries again). The client logs in, reads and logs out within each poll.
-If the switch offers it, use a dedicated account for ERS-Proxy. A rejected login is not
-retried until the stored login or address changes, because the switch locks the account after
-several failed logins.
-
-**Use an `http://` address.** On the tested firmware (1.0.7.128) a TCP connection to the HTTPS
-port that the client closes with a reset reboots the whole switch (about 50 s). ERS-Proxy
-closes connections normally, but **never run port scans against a GWN switch**. The web API is
-the same on port 80. The kind `gwn` opens the switch's web interface directly in a tab.
-
-Verified read-only on a GWN7721 (firmware 1.0.7.128): ports, speed, VLANs, PVID, tagging,
-LLDP and rates match the switch's web interface. LAGs, PoE models and larger GWN models were
-not seen; PoE is not read. SNMP alone (source `snmp`, driver `grandstream`) shows ports,
-speed, PVID and traffic. The SNMP agent drops requests with more than four variable bindings,
-so ERS-Proxy asks for at most four objects per GET.
-
 ### RouterOS source (MikroTik)
 
 RouterOS's SNMP agent reports ports, link, speed, traffic, LLDP neighbours and each port's
@@ -213,12 +175,10 @@ Groundwork for a network map.
   5 minutes per device and keeps the last one in the snapshots of the polls in between
   (`Snapshot.FDBTime` says when it was read). An error only adds a note. On RouterOS (REST
   source) it comes from `interface/bridge/host` (read-only GET, entries of the bridge itself
-  are left out). Not available: SwOS and EDM (not yet), Grandstream GWN (its SNMP agent has no
-  forwarding table; the table exists only in its web interface), and Cisco only for VLAN 1
+  are left out). Not available: SwOS and EDM (not yet), and Cisco only for VLAN 1
   (per-VLAN tables need `community@vlan`, which is not read).
 - **Sources.** SNMP: all objects above. RouterOS REST: neighbour MAC from `/ip/neighbor`
-  as chassis ID (subtype 4), FDB from the bridge host table. GWN web: the neighbour's chassis
-  ID.
+  as chassis ID (subtype 4), FDB from the bridge host table.
 - **Topology** (`internal/topology`). Devices are identified by chassis ID and base MAC, else
   by name or sysName. An LLDP neighbour gives a link; the far port is found by the port ID or
   description, else from the far device's own LLDP table. LAG members are replaced by the LAG

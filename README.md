@@ -13,7 +13,7 @@ Avaya/Extreme ERS switches work in today's browsers.**
   fails after the login. ERS-Proxy fetches EDM from the switch, fixes the affected files on
   the fly and serves them to your browser. Nothing is changed on the switch.
 - **All devices in one place.** Add your switches on the left – ERS and VSP switches and
-  MikroTik SwOS switches through the proxy (with automatic login), MikroTik RouterOS devices (WebFig through the proxy, the dashboard reads their REST API), Grandstream GWN switches (opened directly; the dashboard reads their web API) and any other device (modern switches, firewalls, access points) as a direct link. Their
+  MikroTik SwOS switches through the proxy (with automatic login), MikroTik RouterOS devices (WebFig through the proxy, the dashboard reads their REST API) and any other device (modern switches, firewalls, access points) as a direct link. Their
   web interfaces open on the right in tabs, in a new browser tab or in a popup window; each
   user and each device can choose. Devices can be added one by one, several at once (paste a
   list from a spreadsheet) or imported from JSON/CSV.
@@ -26,8 +26,8 @@ Avaya/Extreme ERS switches work in today's browsers.**
   certificate pinning instead of blind trust. See [docs/security.md](docs/security.md).
 - **Port dashboard.** Every port of every monitored switch at a glance: link, speed, duplex,
   VLANs, PoE, LAG, LLDP neighbour and traffic with history – read-only via SNMP, via the EDM
-  interface on ERS and VSP switches, or via the web API of SwOS and Grandstream GWN and the REST API of RouterOS. Vendors plug in as drivers (generic
-  Q-BRIDGE, ERS, VSP/VOSS, Cisco, TP-Link, MikroTik SwOS and RouterOS, Grandstream GWN).
+  interface on ERS and VSP switches, or via the web API of SwOS and the REST API of RouterOS. Vendors plug in as drivers (generic
+  Q-BRIDGE, ERS, VSP/VOSS, Cisco, TP-Link, MikroTik SwOS and RouterOS).
 - **Change settings (optional, experimental).** Off by default. With `configure.enabled` in
   `config.yaml`, admins can change port VLANs, port state and name, VLANs and PoE from the
   dashboard – VSP/VOSS first. Every change is previewed, applied "commit confirmed" and reverted

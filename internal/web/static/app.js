@@ -19,8 +19,7 @@
     var form = document.getElementById("device-form");
     var sync = function () {
       form.classList.toggle("device-kind-link", kind.value === "link");
-      form.classList.toggle("device-kind-edm-direct", kind.value === "edm-direct" || kind.value === "gwn");
-      form.classList.toggle("device-kind-gwn", kind.value === "gwn");
+      form.classList.toggle("device-kind-edm-direct", kind.value === "edm-direct");
       form.classList.toggle("device-kind-routeros", kind.value === "routeros");
     };
     kind.addEventListener("change", sync);
@@ -44,7 +43,7 @@
   var bulkRows = document.getElementById("bulk-rows");
   var bulkTpl = document.getElementById("bulk-row");
   if (bulkRows && bulkTpl) {
-    var bulkKinds = ["ers-edm", "vsp-edm", "edm-direct", "swos", "gwn", "routeros", "link"];
+    var bulkKinds = ["ers-edm", "vsp-edm", "edm-direct", "swos", "routeros", "link"];
     var rowList = function () { return bulkRows.querySelectorAll("tbody.bulk-row"); };
     var addRow = function () {
       var node = bulkTpl.content.firstElementChild.cloneNode(true);

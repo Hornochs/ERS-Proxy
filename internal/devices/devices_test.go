@@ -496,7 +496,7 @@ func TestNormalizeRouterOS(t *testing.T) {
 	if d.Isolation != store.IsolationOff || d.AutoLogin {
 		t.Errorf("isolation %q auto-login %v", d.Isolation, d.AutoLogin)
 	}
-	if !d.Proxied() || !d.Upstream() || d.Direct() || d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() || d.GWN() ||
+	if !d.Proxied() || !d.Upstream() || d.Direct() || d.AlwaysTab() || d.EDM() || !d.RouterOS() || d.SwOS() ||
 		!d.WebApp() || !d.Rebase() {
 		t.Fatal("kind helpers for routeros")
 	}
@@ -505,13 +505,13 @@ func TestNormalizeRouterOS(t *testing.T) {
 		t.Fatal("kind helpers for swos")
 	}
 	var fe *FieldError
-	for _, kind := range []string{store.KindERS, store.KindSwOS, store.KindGWN, store.KindEDMDirect, store.KindLink} {
+	for _, kind := range []string{store.KindERS, store.KindSwOS, store.KindEDMDirect, store.KindLink} {
 		x := &store.Device{Name: "x", Kind: kind, URL: "http://192.0.2.41/", MonitorSource: store.MonitorRouterOS}
 		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
 			t.Errorf("routeros source on %s: %v", kind, err)
 		}
 	}
-	for _, src := range []string{store.MonitorEDM, store.MonitorSwOS, store.MonitorGWN} {
+	for _, src := range []string{store.MonitorEDM, store.MonitorSwOS} {
 		x := &store.Device{Name: "x", Kind: store.KindRouterOS, URL: "192.0.2.40", MonitorSource: src}
 		if err := Normalize(x); !errors.As(err, &fe) || fe.Key != "monitor_source" {
 			t.Errorf("%s source on routeros: %v", src, err)

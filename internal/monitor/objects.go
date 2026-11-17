@@ -137,17 +137,13 @@ var Objects = map[string]string{
 	// RAPID-CITY scalars of VSP/VOSS switches
 	"rcSysVersion":       "1.3.6.1.4.1.2272.1.1.7",
 	"rcChasSerialNumber": "1.3.6.1.4.1.2272.1.4.2",
-	// Grandstream GWN switch scalars below 1.3.6.1.4.1.42397.1.3.1 (no public
-	// MIB; names chosen here, meaning seen on a GWN7721)
-	"gwnProductModel":    "1.3.6.1.4.1.42397.1.3.1.1",
-	"gwnFirmwareVersion": "1.3.6.1.4.1.42397.1.3.1.4",
 }
 
 // Scalar reports whether a name is a scalar object (read with ".0").
 func Scalar(name string) bool {
 	switch name {
 	case "sysDescr", "sysObjectID", "sysUpTime", "sysName", "sysLocation", "lldpLocChassisIdSubtype", "lldpLocChassisId", "dot1dBaseBridgeAddress", "rcSysVersion", "rcChasSerialNumber",
-		"mtxrSerialNumber", "mtxrFirmwareVersion", "gwnProductModel", "gwnFirmwareVersion":
+		"mtxrSerialNumber", "mtxrFirmwareVersion":
 		return true
 	}
 	return false
