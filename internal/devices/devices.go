@@ -77,13 +77,17 @@ func Normalize(d *store.Device) error {
 		return err
 	}
 	switch d.Kind {
-	case store.KindERS, store.KindVSP, store.KindSwOS:
+	case store.KindERS, store.KindVSP, store.KindSwOS, store.KindRouterOS:
 		u, err := normalizeBase(d.URL)
 		if err != nil {
 			return err
 		}
 		d.URL = u
-	case store.KindEDMDirect, store.KindGWN, store.KindRouterOS:
+		if d.Kind == store.KindRouterOS {
+			// WebFig's login is encrypted JavaScript: no auto-login.
+			d.AutoLogin = false
+		}
+	case store.KindEDMDirect, store.KindGWN:
 		u, err := normalizeBase(d.URL)
 		if err != nil {
 			return err

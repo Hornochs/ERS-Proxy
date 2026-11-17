@@ -227,7 +227,9 @@ Needs RouterOS 7 with the service `www-ssl` (or `www`) enabled, an account in a 
    shown in WebFig (*Bridge › VLANs*, *Interfaces*, *IP › Neighbors*).
 4. A wrong password stops the data source with a login error after one attempt (check the
    device's log in RouterOS: one failed login, not one per poll).
-5. Open WebFig from the sidebar (*Expect* in 7.16: a new browser tab).
+5. Open WebFig from the sidebar. *Expect* (7.17): WebFig in a workspace tab through the proxy;
+   log in to WebFig, look at Quick Set and Advanced › Interfaces, log out. The browser's network
+   tab shows only requests below `/d/{token}/`.
 
 ## After the tests
 
@@ -284,3 +286,4 @@ Needs RouterOS 7 with the service `www-ssl` (or `www`) enabled, an account in a 
 | C.x | Open: SNMP channel (needs write credentials), VOSS 7.1 (VSP 4850GTS), ERS (not supported by the planner yet) | – | finding during the run: a hybrid port showed as trunk on the dashboard until the VOSS driver read `rcVlanPortUntagDefaultVlan` (fixed) |
 | R.1 | MikroTik CRS310-8G+2S+ (RouterOS 7.25.1): SNMP dashboard data | ok | 2026-11-16, read-only: driver `routeros`, ten ethernet ports in front-panel order, speed, PVID, LLDP neighbour and traffic match WebFig; no VLAN table, EtherLike or IEEE8023-LAG over SNMP |
 | R.2 | RouterOS: REST data source | ok | same ports and `ifIndex` as SNMP, plus VLAN membership (VLAN 1337 untagged on ether1–8 and sfp-sfpplus1, tagged on sfp-sfpplus2), PVID and duplex; self-signed certificate pinned through the edit page. Bonds, PoE and several bridges not configured on the test device |
+| R.3 | RouterOS: WebFig through the proxy (7.17) | ok after fix | 2026-11-16, Chromium, embedded: login, Quick Set, Advanced › Interfaces with live rates, logout; nothing outside `/d/{token}/`. Fixed on the way: menu files (`.jg`) answered `406` until the proxy sent `Accept-Encoding: gzip`. WebFig's own script error (`ftype`) also appears without the proxy |

@@ -164,7 +164,7 @@ REST API of RouterOS 7 instead. It
 
 - works only for devices of kind `routeros` and needs the device's stored **web login**; the
   REST API is part of the web server (service `www-ssl`, from RouterOS 7.9 also `www`), so the
-  device's address is the WebFig address. Confirm a self-signed certificate on the device's
+  device's address is the WebFig address (shown through the proxy). Confirm a self-signed certificate on the device's
   edit page ("Check and confirm certificate") before the first poll;
 - sends `GET` requests for an allow-list of menus only (system identity, resource and
   RouterBOARD, SNMP location, interfaces, ethernet, bonding, VLAN interfaces, bridge, bridge

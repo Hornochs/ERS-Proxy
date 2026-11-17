@@ -13,7 +13,7 @@ Avaya/Extreme ERS switches work in today's browsers.**
   fails after the login. ERS-Proxy fetches EDM from the switch, fixes the affected files on
   the fly and serves them to your browser. Nothing is changed on the switch.
 - **All devices in one place.** Add your switches on the left – ERS and VSP switches and
-  MikroTik SwOS switches through the proxy (with automatic login), Grandstream GWN switches and MikroTik RouterOS devices (opened directly; the dashboard reads their web or REST API) and any other device (modern switches, firewalls, access points) as a direct link. Their
+  MikroTik SwOS switches through the proxy (with automatic login), MikroTik RouterOS devices (WebFig through the proxy, the dashboard reads their REST API), Grandstream GWN switches (opened directly; the dashboard reads their web API) and any other device (modern switches, firewalls, access points) as a direct link. Their
   web interfaces open on the right in tabs, in a new browser tab or in a popup window; each
   user and each device can choose. Devices can be added one by one, several at once (paste a
   list from a spreadsheet) or imported from JSON/CSV.

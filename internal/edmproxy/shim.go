@@ -36,15 +36,22 @@ const storagePath = "/__ersproxy/storage"
 //     (window.open returns null), so the shim returns a stand-in, collects
 //     what is written and opens the window with it as a Blob URL. The window
 //     stays sandboxed.
-//   - Absolute request paths (rebase, SwOS only): SwOS's page loads its data
-//     with XMLHttpRequest from absolute paths ("/link.b"), which would leave
-//     the proxy path. The shim maps such paths below /d/{token}/.
-func shimJS(cookies, storage, base string, rebase bool) string {
+//   - Absolute request paths (rebase, SwOS and RouterOS): SwOS's page loads
+//     its data with XMLHttpRequest from absolute paths ("/link.b"), which
+//     would leave the proxy path. The shim maps such paths below /d/{token}/.
+//   - Web applications (webApp, RouterOS's WebFig): also fetch and URLs that
+//     page script sets on elements (href, src, action) are mapped, and Web
+//     Storage answers property access (localStorage["key"]) as well. Static
+//     attributes and navigations are rewritten by the "rebase" patch.
+func shimJS(cookies, storage, base string, rebase, webApp bool) string {
 	c, _ := json.Marshal(cookies)
 	bp, _ := json.Marshal(base)
-	rb := "false"
+	rb, wa := "false", "false"
 	if rebase {
 		rb = "true"
+	}
+	if webApp {
+		wa = "true"
 	}
 	b, _ := json.Marshal(base + strings.TrimPrefix(cookiePath, "/"))
 	sp, _ := json.Marshal(base + strings.TrimPrefix(storagePath, "/"))
@@ -67,6 +74,42 @@ func shimJS(cookies, storage, base string, rebase bool) string {
       }
       return realXHROpen.apply(this, args);
     };
+  }
+  var webApp = ` + wa + `;
+  // "/x" -> base + "x" for strings; anything else is returned unchanged.
+  var rebaseURL = function (url) {
+    if (typeof url === "string" && url.charAt(0) === "/" && url.charAt(1) !== "/" && url.indexOf(base) !== 0) {
+      return base + url.slice(1);
+    }
+    return url;
+  };
+  if (webApp) {
+    if (typeof window.fetch === "function") {
+      var realFetch = window.fetch;
+      window.fetch = function (input, init) {
+        if (typeof input === "string") input = rebaseURL(input);
+        else if (input instanceof URL && input.origin === location.origin) input = rebaseURL(input.pathname + input.search + input.hash);
+        return realFetch.call(window, input, init);
+      };
+    }
+    var urlAttrs = { href: 1, src: 1, action: 1 };
+    var realSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (urlAttrs[String(name).toLowerCase()] === 1) value = rebaseURL(String(value));
+      return realSetAttribute.call(this, name, value);
+    };
+    [["HTMLAnchorElement", "href"], ["HTMLLinkElement", "href"], ["HTMLImageElement", "src"],
+      ["HTMLScriptElement", "src"], ["HTMLIFrameElement", "src"], ["HTMLFormElement", "action"]].forEach(function (p) {
+      var proto = window[p[0]] && window[p[0]].prototype;
+      var desc = proto && Object.getOwnPropertyDescriptor(proto, p[1]);
+      if (!desc || !desc.set) return;
+      Object.defineProperty(proto, p[1], {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (v) { desc.set.call(this, rebaseURL(String(v))); }
+      });
+    });
   }
   function parse(s) {
     var out = {};
@@ -143,7 +186,14 @@ func shimJS(cookies, storage, base string, rebase bool) string {
         key: function (i) { var ks = keys(); return i >= 0 && i < ks.length ? ks[i].slice(prefix.length) : null; }
       };
       Object.defineProperty(st, "length", { get: function () { return keys().length; } });
-      return st;
+      if (!webApp || typeof Proxy !== "function") return st;
+      // localStorage["key"] and localStorage["key"] = value, as Web Storage allows.
+      return new Proxy(st, {
+        get: function (t, k) { return (typeof k !== "string" || k in t) ? t[k] : t.getItem(k); },
+        set: function (t, k, v) { if (typeof k === "string" && !(k in t)) { t.setItem(k, v); } else { t[k] = v; } return true; },
+        deleteProperty: function (t, k) { if (typeof k === "string" && !(k in t)) t.removeItem(k); return true; },
+        has: function (t, k) { return (k in t) || (typeof k === "string" && t.getItem(k) !== null); }
+      });
     };
     var local = makeStorage("l:"), session = makeStorage("s:");
     try {

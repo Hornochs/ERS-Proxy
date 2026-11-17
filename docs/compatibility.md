@@ -101,9 +101,17 @@ on a GWN7721, firmware 1.0.7.128):
 | other RouterOS 7 devices (CRS3xx/5xx, routers) | 7.x | HTTPS or HTTP | expected to work | Same REST API; PoE is not read; on devices whose ethernet ports are not numbered in front-panel order the front-panel numbers can differ |
 | RouterOS 6 | 6.x | – | SNMP only | No REST API: use the source `snmp` (no VLAN table, duplex or bonds) |
 
-The kind `routeros` opens WebFig directly in a tab (WebFig sends `X-Frame-Options: sameorigin`,
-so it cannot be embedded; its login is encrypted JavaScript, so there is no auto-login). The
-server only talks to the device for the data source. Facts seen on the CRS310:
+The kind `routeros` shows WebFig through the proxy (since step 7.17; WebFig's own
+`X-Frame-Options: sameorigin` is replaced by the proxy's isolation headers). The user logs in to
+WebFig itself; its login is encrypted JavaScript, so there is no auto-login. Verified on the
+CRS310 (RouterOS 7.25.1, 2026-11-16, read-only) in Chromium, embedded in the workspace: login,
+Quick Set, the Advanced menus (interface list with live rates) and logout; every request stayed
+below `/d/{token}/`, and the page looked the same as WebFig opened directly. WebFig itself logs
+one script error (`ftype`, "reading 'type'") also when opened directly. Facts seen on the CRS310:
+
+- **WebFig:** absolute paths in HTML attributes, `fetch`, `XMLHttpRequest` and `location`
+  navigations; an ES module script; menu files (`.jg`) only with `Accept-Encoding: gzip`
+  (`406` otherwise); login data in `sessionStorage`, the session token in `localStorage`.
 
 - **SNMP agent:** system group (`sysObjectID` `1.3.6.1.4.1.14988.1`, `sysDescr` "RouterOS
   <board> <version>"), IF-MIB with 64-bit counters, BRIDGE-MIB, LLDP-MIB, from Q-BRIDGE only

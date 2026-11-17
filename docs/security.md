@@ -83,6 +83,17 @@ header never reaches the browser, so neither a browser login dialog nor the pass
 involved in the browser. Content of the sandboxed SwOS page can use the stored login only for
 requests to its own switch below its own token path – which is what opening the device grants
 anyway. Without a stored login a `swos` device is not opened.
+
+Devices of kind `routeros` (MikroTik RouterOS) show WebFig through the proxy in the same
+sandbox. The user logs in to WebFig itself: WebFig encrypts its protocol in the browser
+(`/jsproxy`, Curve25519), so the proxy only passes encrypted bytes and there is no auto-login;
+the stored web login is used only by the server for the REST data source. WebFig's login page
+puts the typed user name and password into `sessionStorage` until WebFig has read them. In the
+sandbox that storage is the shim's, so for that moment the values are also held in the proxy
+session's page storage (in memory, never sent to the device, never logged); WebFig clears
+`sessionStorage` right after the login and the next snapshot replaces them. WebFig keeps its
+session token in `localStorage`, which the shim holds in the proxy session the same way, until
+the proxy session ends.
 Devices of kind `link` and `edm-direct` (VSP switches opened directly) are not proxied: the browser loads them from their own origin, never under the portal's, so this
 section does not apply to them. For `edm-direct` devices ERS-Proxy only reads from the EDM
 itself (EDM data source) with the pinned certificate and the stored login (T5, T6).
