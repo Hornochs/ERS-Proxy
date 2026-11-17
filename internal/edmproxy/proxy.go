@@ -373,7 +373,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c, err := p.client(ps.device)
 	if err != nil {
-		p.message(w, r, http.StatusBadGateway, err.Error())
+		p.log.Warn("proxy client", "device", ps.device.Name, "err", err)
+		p.message(w, r, http.StatusBadGateway, "ERS-Proxy could not connect to the device. An admin finds the details in the device diagnostics and the log.")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, p.app.Cfg.Proxy.MaxBodyBytes)
@@ -582,11 +583,16 @@ func rewriteLocation(loc string, target *url.URL, base string) string {
 	if err != nil {
 		return base
 	}
-	if u.IsAbs() {
+	if u.Scheme != "" && !strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https") {
+		return base // javascript:, data: and the like
+	}
+	if u.Host != "" || u.IsAbs() { // absolute or scheme-relative ("//host/x")
 		if !strings.EqualFold(u.Host, target.Host) && !strings.EqualFold(u.Hostname(), target.Hostname()) {
-			return loc // somewhere else entirely
+			// A foreign target would make the portal an open redirect for
+			// whatever the switch sends: stay on the device instead.
+			return base
 		}
-		u.Scheme, u.Host = "", ""
+		u.Scheme, u.Host, u.User = "", "", nil
 	}
 	if strings.HasPrefix(u.Path, "/") {
 		u.Path = strings.TrimSuffix(base, "/") + u.Path
@@ -607,7 +613,9 @@ func sanitizeHeader(s string) string {
 }
 
 func (p *Proxy) upstreamError(w http.ResponseWriter, r *http.Request, ps *proxySession, err error) {
-	msg := "The device did not answer: " + err.Error()
+	// The error text (address, port, TLS details) goes to the diagnostics
+	// and the log, not to the browser.
+	msg := "The device did not answer. An admin finds the details in the device diagnostics and the log."
 	var pm *upstream.PinMismatchError
 	switch {
 	case errors.As(err, &pm):

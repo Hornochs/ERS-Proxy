@@ -23,6 +23,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `trusted_proxies`.
 - The page after login accepts only local paths (control characters and backslashes are
   refused).
+- Redirects from a device to another host (also scheme-relative `//host/…`) now stay on the
+  device instead of leaving the portal, and proxy error pages no longer show the device's
+  address or connection details (they are in the diagnostics and the log).
 - Only admins open devices. Opening logs in with the stored device account, which usually has
   full rights on the switch, so users (role `user`) now see dashboards and maps but no device
   list. Every open is recorded in the audit log (`device.open`), and changing a user's role
