@@ -60,6 +60,8 @@ type Server struct {
 	login   *auth.LoginLimiter
 	loginIP *auth.LoginLimiter
 	reauth  *auth.LoginLimiter
+	// probeCache keeps certificate probes for the trust page.
+	probeCache probeCache
 	// Opener handles ers-edm devices; without it they cannot be opened.
 	Opener Opener
 	// Health provides status dots; optional.
@@ -240,6 +242,7 @@ func frameable(w http.ResponseWriter) {
 }
 
 func (s *Server) deviceChanged(id int64) {
+	s.probeCache.forget(id)
 	if s.OnDeviceChange != nil {
 		s.OnDeviceChange(id)
 	}
