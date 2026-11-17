@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,11 +82,22 @@ func New(ctx context.Context, a *app.App) *Proxy {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				p.reg.expire(a.Cfg.Proxy.IdleTimeout)
+				p.expireGuarded(a.Cfg.Proxy.IdleTimeout)
 			}
 		}
 	}()
 	return p
+}
+
+// expireGuarded ends idle proxy sessions; a panic is logged instead of
+// ending the process.
+func (p *Proxy) expireGuarded(idle time.Duration) {
+	defer func() {
+		if r := recover(); r != nil {
+			p.log.Error("panic while expiring proxy sessions", "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	p.reg.expire(idle)
 }
 
 // Open creates a proxy session for the logged-in user and redirects to it.
