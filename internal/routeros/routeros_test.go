@@ -64,8 +64,16 @@ func TestLoad(t *testing.T) {
 	if st.VLANs[0].Name != "" { // dynamic entry: comment "added by pvid" is no name
 		t.Errorf("VLAN 1 %+v", st.VLANs[0])
 	}
-	if len(st.Neighbors) != 2 || st.Neighbors[0] != (routeros.Neighbor{Interface: "uplink", Identity: "core-sw", PortID: "1/1", Bridge: true, By: "lldp"}) {
+	if len(st.Neighbors) != 2 || st.Neighbors[0] != (routeros.Neighbor{Interface: "uplink", Identity: "core-sw", PortID: "1/1", MAC: "AA:BB:CC:00:00:01", Bridge: true, By: "lldp"}) {
 		t.Errorf("neighbours %+v", st.Neighbors)
+	}
+	wantHosts := []routeros.Host{
+		{MAC: "AA:BB:CC:00:00:01", VID: 10, Interface: "uplink", Bridge: "bridge1", Dynamic: true},
+		{MAC: "AA:BB:CC:00:00:02", VID: 20, Interface: "ether2", Bridge: "bridge1", Dynamic: true},
+		{MAC: "AA:BB:CC:00:00:03", VID: 20, Interface: "bond1", Bridge: "bridge1", Dynamic: true},
+	}
+	if !reflect.DeepEqual(st.Hosts, wantHosts) { // the local entry is skipped
+		t.Errorf("hosts %+v", st.Hosts)
 	}
 	if len(fake.Writes) != 0 {
 		t.Errorf("writes %v", fake.Writes)

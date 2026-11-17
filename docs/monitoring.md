@@ -168,7 +168,7 @@ REST API of RouterOS 7 instead. It
   edit page ("Check and confirm certificate") before the first poll;
 - sends `GET` requests for an allow-list of menus only (system identity, resource and
   RouterBOARD, SNMP location, interfaces, ethernet, bonding, VLAN interfaces, bridge, bridge
-  ports, bridge VLANs, IP neighbours) and exactly one command, `/interface/ethernet/monitor`
+  ports, bridge VLANs, bridge hosts, IP neighbours) and exactly one command, `/interface/ethernet/monitor`
   with `once` (a `POST` in the REST API, but it only reads link rate and duplex of the ports
   with link) – never `set`, `add`, `remove` or `export`. A test checks the requests;
 - numbers ports like the SNMP agent (`ifIndex` = RouterOS's interface ID), so the history
@@ -192,6 +192,48 @@ and PoE were not seen on hardware; PoE is not read. SNMP alone (source `snmp`, d
 SNMP and the EDM data source use the host of the device's address (`url`) – the same address the
 web interface is reached at. For devices whose management address differs from the address of
 their web UI, enter the management address as the device's address.
+
+## Device identity, MAC address table and topology
+
+Groundwork for a network map.
+
+- **Chassis IDs.** The snapshot carries the device's LLDP chassis ID (`lldpLocChassisId`
+  with its subtype) and the base bridge MAC (`dot1dBaseBridgeAddress`). Every neighbour has
+  its chassis ID (`lldpRemChassisId`) and its first IPv4 management address (from the index
+  of `lldpRemManAddrTable`). MAC addresses are always lower-case `aa:bb:cc:dd:ee:ff`; chassis
+  IDs of another subtype are shown as text (or as a MAC when they are six raw bytes).
+- **MAC address table (FDB).** `dot1qTpFdbPort` (VLAN ID = fdbId) or, if that is empty,
+  `dot1dTpFdbPort`; bridge ports are mapped to ifIndex, entries on unknown ports are dropped,
+  at most 20000 entries are kept (a note says so). The poller reads the table at most every
+  5 minutes per device and keeps the last one in the snapshots of the polls in between
+  (`Snapshot.FDBTime` says when it was read). An error only adds a note. On RouterOS (REST
+  source) it comes from `interface/bridge/host` (read-only GET, entries of the bridge itself
+  are left out). SwOS and EDM do not provide it yet.
+- **Sources.** SNMP: all objects above. RouterOS REST: neighbour MAC from `/ip/neighbor`
+  as chassis ID (subtype 4), FDB from the bridge host table. GWN web: the neighbour's chassis
+  ID.
+- **Topology** (`internal/topology`). Devices are identified by chassis ID and base MAC, else
+  by name or sysName. An LLDP neighbour gives a link; the far port is found by the port ID or
+  description, else from the far device's own LLDP table. LAG members are replaced by the LAG
+  interface, so a LAG is one link. For device pairs without an LLDP link, the FDB is used: a
+  device A links to B when B's MAC is learned on a port of A (the port with the fewest MACs if
+  several), unless B lies behind another device on that port (an LLDP link on the same port,
+  or A and the other device both learned on the port where B sees A). The far port is where B
+  learned A's MAC.
+
+## Network maps
+
+Maps (menu **Maps**) show devices as nodes on an optional background image (PNG, JPEG or GIF,
+up to 8 MiB) and the links between them from the topology above, with the current rate in
+both directions and a colour by utilisation (from the port at the A end; if that device is
+not monitored, from the B end). A node shows the poll state (up, error, unknown) or, for
+devices without monitoring, the health check. Clicking a monitored node opens its switch page. The
+page refreshes every `refresh` seconds (default 15).
+
+Admins switch to edit mode to add devices, drag them, upload or remove the background, draw
+a manual link between two ports (for example through a device that is not monitored), hide
+an automatic link that is wrong, and show hidden links again. Positions are stored as
+fractions of the map, so a new background of another size keeps the layout.
 
 ## Prepare the switch
 

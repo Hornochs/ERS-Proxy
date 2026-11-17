@@ -37,7 +37,7 @@ var readPaths = map[string]bool{
 	"system/identity": true, "system/resource": true, "system/routerboard": true, "snmp": true,
 	"interface": true, "interface/ethernet": true, "interface/bonding": true, "interface/vlan": true,
 	"interface/bridge": true, "interface/bridge/port": true, "interface/bridge/vlan": true,
-	"ip/neighbor": true,
+	"ip/neighbor": true, "interface/bridge/host": true,
 }
 
 // monitorPath is the only command sent with POST.
@@ -247,9 +247,26 @@ type Neighbor struct {
 	Identity  string
 	// PortID is the remote port as the neighbour describes it ("interface-name").
 	PortID string
+	// MAC is the neighbour's "mac-address" (aa:bb:cc:dd:ee:ff, as RouterOS
+	// prints it; may be empty).
+	MAC    string
 	Bridge bool
 	// By is how it was discovered (lldp, cdp, mndp, comma-separated).
 	By string
+}
+
+// Host is a learned MAC address of /interface/bridge/host (the bridge's
+// forwarding database). Entries of the bridge itself (local=true) and
+// disabled ones are not kept.
+type Host struct {
+	MAC string
+	// VID is the VLAN ID the address was learned in (0 when the bridge does
+	// not report one).
+	VID int
+	// Interface is the bridge port (an ethernet or bonding interface) the
+	// address was learned on, Bridge the bridge.
+	Interface, Bridge string
+	Dynamic           bool
 }
 
 // State is everything read in one poll.
@@ -268,6 +285,8 @@ type State struct {
 	VLANFiltering bool
 	VLANs         []VLAN
 	Neighbors     []Neighbor
+	// Hosts is the bridge host table (learned MAC addresses).
+	Hosts []Host
 	// Notes are remarks about data that could not be read.
 	Notes []string
 }
@@ -348,7 +367,7 @@ func (c *Client) Load(ctx context.Context) (*State, error) {
 		st.Notes = append(st.Notes, "VLANs: "+err.Error())
 	}
 
-	if ns, err := c.list(ctx, "ip/neighbor", "interface", "identity", "interface-name", "system-caps-enabled", "discovered-by"); err == nil {
+	if ns, err := c.list(ctx, "ip/neighbor", "interface", "identity", "interface-name", "system-caps-enabled", "discovered-by", "mac-address"); err == nil {
 		for _, n := range ns {
 			ifs := n.List("interface")
 			if len(ifs) == 0 {
@@ -356,10 +375,22 @@ func (c *Client) Load(ctx context.Context) (*State, error) {
 			}
 			caps := "," + n["system-caps-enabled"] + ","
 			st.Neighbors = append(st.Neighbors, Neighbor{Interface: ifs[0], Identity: n["identity"], PortID: n["interface-name"],
-				Bridge: strings.Contains(caps, ",bridge,"), By: n["discovered-by"]})
+				MAC: n["mac-address"], Bridge: strings.Contains(caps, ",bridge,"), By: n["discovered-by"]})
 		}
 	} else {
 		st.Notes = append(st.Notes, "Neighbours: "+err.Error())
+	}
+
+	if hs, err := c.list(ctx, "interface/bridge/host", "mac-address", "vid", "on-interface", "bridge", "local", "dynamic", "disabled"); err == nil {
+		for _, h := range hs {
+			if h.Bool("local") || h.Bool("disabled") || h["mac-address"] == "" || h["on-interface"] == "" {
+				continue
+			}
+			st.Hosts = append(st.Hosts, Host{MAC: h["mac-address"], VID: h.Int("vid"), Interface: h["on-interface"],
+				Bridge: h["bridge"], Dynamic: h.Bool("dynamic")})
+		}
+	} else {
+		st.Notes = append(st.Notes, "MAC address table: "+err.Error())
 	}
 	return st, nil
 }

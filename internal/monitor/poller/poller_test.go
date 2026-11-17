@@ -105,3 +105,29 @@ func TestPollerAgainstSimulator(t *testing.T) {
 		t.Fatal("loop not stopped after monitoring was turned off")
 	}
 }
+
+func TestFDBState(t *testing.T) {
+	var f fdbState
+	now := time.Now()
+	if !f.due(now) {
+		t.Error("first poll must read the FDB")
+	}
+	f.requested = now
+	if f.due(now.Add(fdbInterval-time.Second)) || !f.due(now.Add(fdbInterval)) {
+		t.Error("FDB interval")
+	}
+	first := &monitor.Snapshot{FDB: []monitor.FDBEntry{{MAC: "02:00:00:00:00:01", IfIndex: 1}}, FDBTime: now}
+	f.carry(first)
+	second := &monitor.Snapshot{}
+	f.carry(second)
+	if len(second.FDB) != 1 || !second.FDBTime.Equal(now) {
+		t.Errorf("FDB not carried over: %+v", second)
+	}
+	newer := &monitor.Snapshot{FDBTime: now.Add(time.Minute)}
+	f.carry(newer)
+	third := &monitor.Snapshot{}
+	f.carry(third)
+	if !third.FDBTime.Equal(newer.FDBTime) || len(third.FDB) != 0 {
+		t.Errorf("newest FDB not kept: %+v", third)
+	}
+}

@@ -39,6 +39,8 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
   after 12 hours of inactivity; changing a password ends all sessions of the user.
 - Every state-changing request (POST) needs the session's CSRF token and, if the browser sends
   an `Origin` header, it must match `public_url`. `Origin: null` is always rejected.
+- The body of every state-changing request is capped at 16 MiB (413 above), before the CSRF
+  check parses the form.
 - Security headers on all portal pages: a strict Content Security Policy without inline
   scripts or styles, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`,
   `Referrer-Policy: same-origin`.
@@ -229,6 +231,17 @@ on. Without it no console route exists (404). With it:
   creates `<style>` elements. The console page allows styles with a nonce that is new for every
   response (`style-src 'self' 'nonce-…'`) and that `ssh.js` puts on those elements; no
   `'unsafe-inline'`. Terminal output is rendered as text by xterm.js, never as HTML.
+
+### Network maps
+
+- Everyone logged in can view maps; creating, editing, uploading and deleting are in the admin
+  group (role, CSRF, same origin) and audited (`map.*`).
+- Background images are checked by decoding their header (`image.DecodeConfig`), not by name
+  or declared type: only PNG, JPEG and GIF, at most 8 MiB and 50 megapixels. SVG is refused,
+  because it can carry script. The image is served with its detected type,
+  `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`.
+- Device names, port names and errors reach the page only through `textContent` and SVG
+  attributes; the map page needs no inline script or style.
 
 ### Switch sessions (T7)
 

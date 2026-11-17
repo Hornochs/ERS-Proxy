@@ -86,7 +86,7 @@ func TestERSOverEDM(t *testing.T) {
 		t.Fatalf("MLT: %+v", p)
 	}
 	// LLDP index objects are not-accessible; the reader must use "indexNA".
-	if p := snap.Port(1); p.Neighbor == nil || p.Neighbor.SysName != "core-sw" || !p.Neighbor.Bridge {
+	if p := snap.Port(1); p.Neighbor == nil || p.Neighbor.SysName != "gen-sw1" || !p.Neighbor.Bridge {
 		t.Fatalf("LLDP neighbour on 1/1: %+v", p.Neighbor)
 	}
 	if snap.System.Uptime.Hours() != 24 {

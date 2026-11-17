@@ -27,6 +27,7 @@ _Last updated: 2026-11-16_
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, GWN7721, CRS310 with RouterOS; stacks pending) |
 | 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0; open: SNMP channel, VOSS 7.1; design in [switch-configuration.md](switch-configuration.md)) |
 | 9 – SSH console | in progress (9.1–9.3 done; 9.4: ERS 5632FD and CRS310 verified, VSPs open) |
+| 10 – Network map | done (against the snmpsim demo devices; not yet checked on hardware) |
 
 **Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404).
 
@@ -324,6 +325,27 @@ WebSocket.
   login), CRS310 (web login): login and show commands only. See section 11 of
   [hardware-tests.md](hardware-tests.md). *Partly: ERS 5632FD and CRS310 work (2026-11-16); both
   VSPs connect with `compat`, their login is still to be tested with a working SSH account.*
+
+## Phase 10 – Network map
+
+A NagVis-like map: switches as nodes on a background image, links between them with live
+rates.
+
+- **10.1 Data collection.** LLDP chassis IDs and management addresses (`System.ChassisID`,
+  `System.BaseMAC`, `Neighbor.ChassisID`, `Neighbor.MgmtAddr`), the learned MAC address table
+  (`Snapshot.FDB`, read at most every 5 minutes), RouterOS `interface/bridge/host`, GWN
+  neighbour chassis IDs, synthetic test data. *Done.*
+- **10.2 Topology.** `internal/topology`: pure function from snapshots to links (LLDP, FDB
+  fallback). *Done.*
+- **10.3 Storage and background images.** Maps, node positions and background images in the
+  database (`00006_maps.sql`; PNG, JPEG or GIF up to 8 MiB, no SVG). *Done.*
+- **10.4 Map view with live rates.** Page that draws nodes and links with the rates of the
+  linked ports (`/maps/{id}`, `state.json`, `static/map.js`). *Done.*
+- **10.5 Editor (admins).** Place nodes, choose the background, draw manual links, hide
+  links. *Done.*
+- **10.6 Documentation and tests.** Handler tests (roles, upload validation, size), topology
+  table tests, browser test against the snmpsim demo devices. *Done.* Open: a check of the
+  LLDP/FDB links on real switches (read-only, needs approval); FDB from SwOS and EDM.
 
 ## Later
 

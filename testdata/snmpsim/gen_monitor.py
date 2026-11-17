@@ -10,6 +10,11 @@ swos.snmprec (MikroTik CRS305 on SwOS 2.18),
 grandstream.snmprec (Grandstream GWN7721) and
 routeros.snmprec (MikroTik CRS310 on RouterOS 7.25). All values are made up;
 only the OIDs are real. The community of each agent is its file name.
+
+generic, ers5600, voss and routeros also have a local LLDP chassis ID, a base
+bridge MAC, a few learned MAC addresses (dot1qTpFdbPort) and neighbours with
+chassis IDs and a management address. generic and ers5600 (and so the demo
+agents) see each other: gi1/0/8 of generic <-> port 1/1 of the ERS stack.
 """
 import os
 
@@ -52,6 +57,41 @@ class Agent:
         with open(os.path.join(HERE, name), "w") as f:
             for oid, v in sorted(self.rows, key=key):
                 f.write(f"{oid}|{v}\n")
+
+
+def mac(text):
+    return bytes(int(x, 16) for x in text.split(":"))
+
+
+# Locally administered MACs (02:...) so that they never clash with real devices.
+GENERIC_MAC = "02:00:00:aa:00:01"
+ERS_MAC = "02:00:00:bb:00:01"
+ERS_BASE_MAC = "02:00:00:bb:00:02"
+VOSS_MAC = "02:00:00:cc:00:01"
+ROS_MAC = "02:00:00:dd:00:01"
+CORE_MAC = "02:00:00:ee:00:01"
+
+
+def identity(a, chassis, base):
+    """lldpLocChassisIdSubtype/-Id (subtype 4 = macAddress) and dot1dBaseBridgeAddress."""
+    a.i("1.0.8802.1.1.2.1.3.1.0", 4)
+    a.x("1.0.8802.1.1.2.1.3.2.0", mac(chassis))
+    a.x("1.3.6.1.2.1.17.1.1.0", mac(base))
+
+
+def neighbor_id(a, idx, chassis, ip):
+    """Chassis ID and management address of the LLDP neighbour idx (timeMark.port.index)."""
+    a.i(f"1.0.8802.1.1.2.1.4.1.1.4.{idx}", 4)
+    a.x(f"1.0.8802.1.1.2.1.4.1.1.5.{idx}", mac(chassis))
+    # lldpRemManAddrTable: ...addrSubtype(1 = ipv4).addrLen(4).a.b.c.d, value ifSubtype (2 = ifIndex)
+    a.i(f"1.0.8802.1.1.2.1.4.2.1.3.{idx}.1.4.{ip}", 2)
+
+
+def fdb(a, entries):
+    """dot1qTpFdbPort: (vlan, mac, bridge port); index fdbId.mac."""
+    for vlan, m, port in entries:
+        idx = ".".join(str(b) for b in mac(m))
+        a.i(f"1.3.6.1.2.1.17.7.1.2.2.1.2.{vlan}.{idx}", port)
 
 
 IF = "1.3.6.1.2.1.2.2.1"
@@ -121,10 +161,15 @@ def generic():
     for p in range(1, 9):
         a.i(f"1.0.8802.1.1.2.1.3.7.1.2.{p}", 5)
         a.s(f"1.0.8802.1.1.2.1.3.7.1.3.{p}", f"gi1/0/{p}")
-    a.s("1.0.8802.1.1.2.1.4.1.1.7.0.8.1", "1/49")
-    a.s("1.0.8802.1.1.2.1.4.1.1.8.0.8.1", "Uplink to access")
-    a.s("1.0.8802.1.1.2.1.4.1.1.9.0.8.1", "core-sw")
+    # (the neighbour is the ers5600 agent: port 1/1 of the stack)
+    a.s("1.0.8802.1.1.2.1.4.1.1.7.0.8.1", "1/1")
+    a.s("1.0.8802.1.1.2.1.4.1.1.8.0.8.1", "Uplink to stack")
+    a.s("1.0.8802.1.1.2.1.4.1.1.9.0.8.1", "ers-stack")
     a.x("1.0.8802.1.1.2.1.4.1.1.12.0.8.1", [0x28, 0x00])  # bridge + router
+    neighbor_id(a, "0.8.1", ERS_MAC, "10.0.0.2")
+    identity(a, GENERIC_MAC, GENERIC_MAC)
+    fdb(a, [(1, "02:00:00:10:00:01", 1), (10, "02:00:00:10:00:03", 3),
+            (1, ERS_MAC, 8), (20, "02:00:00:20:00:01", 8)])
     a.write("generic.snmprec")
 
 
@@ -140,6 +185,7 @@ def ers5600():
         interface(a, idx, f"{unit}/{n}", f"Ethernet Port, Unit {unit}, Port {n}", 6, up, 1000, alias="",
                   in_octets=idx * 500000, out_octets=idx * 700000)
         a.i(f"1.3.6.1.2.1.10.7.2.1.19.{idx}", 3)
+        a.i(f"1.3.6.1.2.1.17.1.4.1.2.{idx}", idx)  # bridge port = ifIndex
         # rcVlanPortTable: PVID, tagging (ifIndex 1 = tagAll trunk, ifIndex 2 = untagPvidOnly)
         a.i(f"1.3.6.1.4.1.2272.1.3.3.1.7.{idx}", 1)
         a.i(f"1.3.6.1.4.1.2272.1.3.3.1.8.{idx}", {1: 1, 2: 4}.get(idx, 2))
@@ -158,10 +204,14 @@ def ers5600():
         a.s(f"1.3.6.1.4.1.2272.1.3.2.1.2.{vid}", name)
         a.x(f"1.3.6.1.4.1.2272.1.3.2.1.11.{vid}", bitmap(members, 88))
     # LLDP neighbour on port 1/1 (the EDM bridge reads it only through "indexNA")
-    a.s("1.0.8802.1.1.2.1.4.1.1.7.7638.1.2", "two-gigabitEthernet 1/0/2")
+    # (the neighbour is the generic agent: its port gi1/0/8)
+    a.s("1.0.8802.1.1.2.1.4.1.1.7.7638.1.2", "gi1/0/8")
     a.s("1.0.8802.1.1.2.1.4.1.1.8.7638.1.2", "uplink")
-    a.s("1.0.8802.1.1.2.1.4.1.1.9.7638.1.2", "core-sw")
+    a.s("1.0.8802.1.1.2.1.4.1.1.9.7638.1.2", "gen-sw1")
     a.x("1.0.8802.1.1.2.1.4.1.1.12.7638.1.2", [0x28, 0x00])
+    neighbor_id(a, "7638.1.2", GENERIC_MAC, "10.0.0.1")
+    identity(a, ERS_MAC, ERS_BASE_MAC)
+    fdb(a, [(1, GENERIC_MAC, 1), (20, "02:00:00:20:00:01", 1), (30, "02:00:00:30:00:01", 3)])
     # MLT 1 = ports 1/3 and 1/4, MLT 2 unused
     a.s("1.3.6.1.4.1.2272.1.17.10.1.2.1", "to-core")
     a.x("1.3.6.1.4.1.2272.1.17.10.1.3.1", bitmap([3, 4], 88))
@@ -322,6 +372,9 @@ def voss():
     a.s("1.0.8802.1.1.2.1.4.1.1.8.0.192.1", "Downlink to lab")
     a.s("1.0.8802.1.1.2.1.4.1.1.9.0.192.1", "core-sw")
     a.x("1.0.8802.1.1.2.1.4.1.1.12.0.192.1", [0x28, 0x00])
+    neighbor_id(a, "0.192.1", CORE_MAC, "10.0.0.254")
+    identity(a, VOSS_MAC, VOSS_MAC)
+    fdb(a, [(1, CORE_MAC, 192), (10, "02:00:00:40:00:01", 193)])
     a.write("voss.snmprec")
 
 
@@ -399,6 +452,10 @@ def routeros():
     a.s("1.0.8802.1.1.2.1.4.1.1.8.0.11.1", "uplink")
     a.s("1.0.8802.1.1.2.1.4.1.1.9.0.11.1", "core-sw")
     a.x("1.0.8802.1.1.2.1.4.1.1.12.0.11.1", [0x28, 0x00])
+    neighbor_id(a, "0.11.1", CORE_MAC, "10.0.0.254")
+    identity(a, ROS_MAC, ROS_MAC)
+    # bridge port n is ifIndex n + 1
+    fdb(a, [(1337, "02:00:00:50:00:01", 1), (1, CORE_MAC, 10)])
     a.write("routeros.snmprec")
 
 

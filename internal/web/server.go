@@ -89,7 +89,7 @@ type DiagRow struct {
 
 var pageFiles = []string{
 	"login", "workspace", "account", "error", "trust", "dashboard",
-	"devices", "device_form", "device_bulk", "groups", "users", "audit", "diagnostics", "switch", "port", "config_preview", "ssh",
+	"devices", "device_form", "device_bulk", "groups", "users", "audit", "diagnostics", "switch", "port", "config_preview", "ssh", "maps",
 }
 
 // New parses all templates.
@@ -159,6 +159,10 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/ui/monitor.json", s.monitorJSON)
 		r.Get("/dashboard/{id}", s.switchPage)
 		r.Get("/dashboard/{id}/port/{ifindex}", s.portPage)
+		r.Get("/maps", s.mapsPage)
+		r.Get("/maps/{id}", s.mapPage)
+		r.Get("/maps/{id}/state.json", s.mapState)
+		r.Get("/maps/{id}/background", s.mapBackground)
 		r.Get("/account", s.account)
 		r.Post("/account/password", s.accountPassword)
 		r.Post("/account/prefs", s.accountPrefs)
@@ -190,6 +194,13 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/admin/users/{id}/password", s.userPassword)
 			r.Post("/admin/users/{id}/delete", s.userDelete)
 			r.Get("/admin/audit", s.audit)
+			r.Post("/maps", s.mapCreate)
+			r.Post("/maps/{id}", s.mapUpdate)
+			r.Post("/maps/{id}/delete", s.mapDelete)
+			r.Post("/maps/{id}/background", s.mapBackgroundUpload)
+			r.Post("/maps/{id}/nodes", s.mapNodes)
+			r.Post("/maps/{id}/links", s.mapLinkAdd)
+			r.Post("/maps/{id}/links/{lid}/delete", s.mapLinkDelete)
 			r.Get("/admin/diagnostics", s.diagnostics)
 			if s.Configure != nil { // without it none of these exists (404)
 				r.Post("/admin/devices/{id}/snmp-write", s.deviceSNMPWrite)
@@ -272,10 +283,20 @@ func (s *Server) requireRole(role string) func(http.Handler) http.Handler {
 	}
 }
 
-// csrf checks the session's token and the Origin on every state-changing request.
+// maxRequestBody bounds the body of every state-changing request of the UI
+// (the largest is a map background image of 8 MiB plus the multipart form).
+const maxRequestBody = 16 << 20
+
+// csrf checks the session's token and the Origin on every state-changing
+// request, after capping its body at maxRequestBody.
 func (s *Server) csrf(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if r.ContentLength > maxRequestBody {
+				s.errorPage(w, r, http.StatusRequestEntityTooLarge, "error.too_large")
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
 			if !s.SameOrigin(r) {
 				s.Log.Warn("rejected cross-origin request", "path", r.URL.Path, "origin", r.Header.Get("Origin"),
 					"expected", s.Cfg.Origin(), "hint", "check public_url if this is a legitimate request")

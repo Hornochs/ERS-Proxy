@@ -11,13 +11,25 @@ import (
 	"github.com/lan-dot-party/ers-proxy/internal/monitor"
 	"github.com/lan-dot-party/ers-proxy/internal/monitor/snmpsrc"
 	"github.com/lan-dot-party/ers-proxy/internal/snmptest"
+	"github.com/lan-dot-party/ers-proxy/internal/topology"
 )
 
 func collect(t *testing.T, community string) (*monitor.Snapshot, monitor.Driver) {
 	t.Helper()
+	return collectCtx(t, context.Background(), community)
+}
+
+// collectFDB is collect with the MAC address table requested.
+func collectFDB(t *testing.T, community string) *monitor.Snapshot {
+	t.Helper()
+	s, _ := collectCtx(t, monitor.WithFDB(context.Background()), community)
+	return s
+}
+
+func collectCtx(t *testing.T, ctx context.Context, community string) (*monitor.Snapshot, monitor.Driver) {
+	t.Helper()
 	target := snmptest.Simulator(t, snmptest.DataDir(t), community)
 	target.Timeout = 3 * time.Second
-	ctx := context.Background()
 	r, err := snmpsrc.Open(ctx, target)
 	if err != nil {
 		t.Fatal(err)
@@ -73,11 +85,18 @@ func TestGenericAgainstSimulator(t *testing.T) {
 	if p8.LAG != 100 || p8.LAGName != "Po1" {
 		t.Errorf("port 8 LAG: %d %q", p8.LAG, p8.LAGName)
 	}
-	if p8.Neighbor == nil || p8.Neighbor.SysName != "core-sw" || !p8.Neighbor.Bridge || p8.Neighbor.PortID != "1/49" {
+	if p8.Neighbor == nil || p8.Neighbor.SysName != "ers-stack" || !p8.Neighbor.Bridge || p8.Neighbor.PortID != "1/1" ||
+		p8.Neighbor.ChassisID != "02:00:00:bb:00:01" || p8.Neighbor.MgmtAddr != "10.0.0.2" {
 		t.Errorf("port 8 neighbour: %+v", p8.Neighbor)
 	}
 	if port(t, s, 2).InErrors != 3 || port(t, s, 3).InOctets != 3_000_000 || !port(t, s, 3).HasHC {
 		t.Error("counters not read")
+	}
+	if s.System.ChassisID != "02:00:00:aa:00:01" || s.System.BaseMAC != "02:00:00:aa:00:01" {
+		t.Errorf("identity %+v", s.System)
+	}
+	if len(s.FDB) != 0 || !s.FDBTime.IsZero() {
+		t.Errorf("FDB collected without WithFDB: %+v", s.FDB)
 	}
 	if got := len(s.VLANs); got != 3 || s.VLANs[1].Name != "office" {
 		t.Errorf("VLANs %+v", s.VLANs)
@@ -93,10 +112,30 @@ func TestGenericAgainstSimulator(t *testing.T) {
 	}
 }
 
+func TestGenericFDB(t *testing.T) {
+	s := collectFDB(t, "generic")
+	want := []monitor.FDBEntry{
+		{MAC: "02:00:00:10:00:01", VLAN: 1, IfIndex: 1},
+		{MAC: "02:00:00:10:00:03", VLAN: 10, IfIndex: 3},
+		{MAC: "02:00:00:20:00:01", VLAN: 20, IfIndex: 8},
+		{MAC: "02:00:00:bb:00:01", VLAN: 1, IfIndex: 8},
+	}
+	if !reflect.DeepEqual(s.FDB, want) || s.FDBTime.IsZero() {
+		t.Errorf("FDB %+v (time %v)", s.FDB, s.FDBTime)
+	}
+}
+
 func TestERSAgainstSimulator(t *testing.T) {
 	s, d := collect(t, "ers5600")
 	if d.Name() != "ers" {
 		t.Fatalf("detected %s", d.Name())
+	}
+	if s.System.ChassisID != "02:00:00:bb:00:01" || s.System.BaseMAC != "02:00:00:bb:00:02" {
+		t.Errorf("identity %+v", s.System)
+	}
+	if f := collectFDB(t, "ers5600").FDB; len(f) != 3 || f[0] != (monitor.FDBEntry{MAC: "02:00:00:20:00:01", VLAN: 20, IfIndex: 1}) ||
+		f[2] != (monitor.FDBEntry{MAC: "02:00:00:aa:00:01", VLAN: 1, IfIndex: 1}) {
+		t.Errorf("FDB %+v", f)
 	}
 	if len(s.Units) != 2 || s.Units[1].Number != 2 || s.Units[1].Model != "5650TD" || s.Units[1].Firmware != "v6.6.3.015" {
 		t.Fatalf("units %+v", s.Units)
@@ -119,7 +158,8 @@ func TestERSAgainstSimulator(t *testing.T) {
 	if p := port(t, s, 3); p.LAG != 1 || p.LAGName != "to-core" || !reflect.DeepEqual(p.Untagged, []int{30}) {
 		t.Errorf("port 1/3: %+v", p)
 	}
-	if p := port(t, s, 1); p.Neighbor == nil || p.Neighbor.SysName != "core-sw" {
+	if p := port(t, s, 1); p.Neighbor == nil || p.Neighbor.SysName != "gen-sw1" || p.Neighbor.ChassisID != "02:00:00:aa:00:01" ||
+		p.Neighbor.MgmtAddr != "10.0.0.1" || p.Neighbor.PortID != "gi1/0/8" {
 		t.Errorf("LLDP neighbour on 1/1: %+v", p.Neighbor)
 	}
 	if p := port(t, s, 55001); p.Physical || p.Unit != 0 { // out-of-band port, not 430/89
@@ -274,6 +314,13 @@ func TestVOSSAgainstSimulator(t *testing.T) {
 	if d.Name() != "voss" || s.Driver != "voss" {
 		t.Fatalf("detected %s", d.Name())
 	}
+	if s.System.ChassisID != "02:00:00:cc:00:01" || s.System.BaseMAC != "02:00:00:cc:00:01" {
+		t.Errorf("identity %+v", s.System)
+	}
+	if f := collectFDB(t, "voss").FDB; !reflect.DeepEqual(f, []monitor.FDBEntry{
+		{MAC: "02:00:00:40:00:01", VLAN: 10, IfIndex: 193}, {MAC: "02:00:00:ee:00:01", VLAN: 1, IfIndex: 192}}) {
+		t.Errorf("FDB %+v", f)
+	}
 	trunk := port(t, s, 192)
 	if !trunk.Physical || trunk.Unit != 1 || trunk.Number != 1 || !trunk.Up() || trunk.Speed != 1_000_000_000 ||
 		trunk.Duplex != "full" || trunk.Alias != "uplink to core" {
@@ -282,7 +329,7 @@ func TestVOSSAgainstSimulator(t *testing.T) {
 	if trunk.Mode != "trunk" || trunk.PVID != 10 || len(trunk.Untagged) != 0 || !reflect.DeepEqual(trunk.Tagged, []int{1, 10, 20}) {
 		t.Errorf("trunk 1/1: mode %s pvid %d untagged %v tagged %v", trunk.Mode, trunk.PVID, trunk.Untagged, trunk.Tagged)
 	}
-	if n := trunk.Neighbor; n == nil || n.SysName != "core-sw" || n.PortID != "1/12" || !n.Bridge {
+	if n := trunk.Neighbor; n == nil || n.SysName != "core-sw" || n.PortID != "1/12" || !n.Bridge || n.ChassisID != "02:00:00:ee:00:01" || n.MgmtAddr != "10.0.0.254" {
 		t.Errorf("neighbour on 1/1: %+v", trunk.Neighbor)
 	}
 	if p := port(t, s, 195); p.Up() || p.Duplex != "" || p.Speed != 0 || p.Number != 4 { // VOSS reports half duplex without link
@@ -490,6 +537,13 @@ func TestRouterOSAgainstSimulator(t *testing.T) {
 	if len(s.Units) != 1 || s.Units[0].Model != "CRS310-8G+2S+" || s.Units[0].Serial != "SYNTH0003" || s.Units[0].Firmware != "7.25.1" {
 		t.Fatalf("units %+v", s.Units)
 	}
+	if s.System.ChassisID != "02:00:00:dd:00:01" || s.System.BaseMAC != "02:00:00:dd:00:01" {
+		t.Errorf("identity %+v", s.System)
+	}
+	if f := collectFDB(t, "routeros").FDB; !reflect.DeepEqual(f, []monitor.FDBEntry{
+		{MAC: "02:00:00:50:00:01", VLAN: 1337, IfIndex: 2}, {MAC: "02:00:00:ee:00:01", VLAN: 1, IfIndex: 11}}) {
+		t.Errorf("FDB %+v", f)
+	}
 	phys := 0
 	for _, p := range s.Ports {
 		if p.Physical {
@@ -506,7 +560,7 @@ func TestRouterOSAgainstSimulator(t *testing.T) {
 	if p.Number != 10 || p.Name != "sfp-sfpplus2" || p.Speed != 10_000_000_000 || p.PVID != 1 {
 		t.Errorf("sfp-sfpplus2: %+v", p)
 	}
-	if p.Neighbor == nil || p.Neighbor.SysName != "core-sw" || !p.Neighbor.Bridge {
+	if p.Neighbor == nil || p.Neighbor.SysName != "core-sw" || !p.Neighbor.Bridge || p.Neighbor.ChassisID != "02:00:00:ee:00:01" {
 		t.Errorf("sfp-sfpplus2 neighbour: %+v", p.Neighbor)
 	}
 	if !strings.Contains(strings.Join(s.Notes, " "), "RouterOS (REST API)") {
@@ -569,5 +623,17 @@ func TestGrandstreamPortNames(t *testing.T) {
 		if gwnPort.MatchString(name) {
 			t.Errorf("%s matched", name)
 		}
+	}
+}
+
+// The generic and ers5600 agents see each other: one LLDP link on the LAG of
+// gen-sw1 (ifIndex 100) and port 1/1 of the stack.
+func TestSimulatorTopology(t *testing.T) {
+	g, _ := collect(t, "generic")
+	e, _ := collect(t, "ers5600")
+	links := topology.Build([]topology.Device{{ID: 1, Name: "gen", Snap: g}, {ID: 2, Name: "stack", Snap: e}})
+	want := []topology.Link{{A: topology.End{DeviceID: 1, IfIndex: 100, Port: "Po1"}, B: topology.End{DeviceID: 2, IfIndex: 1, Port: "1/1"}, Source: "lldp"}}
+	if !reflect.DeepEqual(links, want) {
+		t.Errorf("links %+v", links)
 	}
 }

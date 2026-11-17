@@ -49,16 +49,28 @@ var Objects = map[string]string{
 	"dot3adAggPortAttachedAggID": "1.2.840.10006.300.43.1.2.1.1.13",
 
 	// LLDP-MIB (IEEE 802.1AB)
-	"lldpLocPortIdSubtype": "1.0.8802.1.1.2.1.3.7.1.2",
-	"lldpLocPortId":        "1.0.8802.1.1.2.1.3.7.1.3",
-	"lldpLocPortDesc":      "1.0.8802.1.1.2.1.3.7.1.4",
-	"lldpRemPortId":        "1.0.8802.1.1.2.1.4.1.1.7",
-	"lldpRemPortDesc":      "1.0.8802.1.1.2.1.4.1.1.8",
-	"lldpRemSysName":       "1.0.8802.1.1.2.1.4.1.1.9",
-	"lldpRemSysCapEnabled": "1.0.8802.1.1.2.1.4.1.1.12",
+	"lldpLocChassisIdSubtype": "1.0.8802.1.1.2.1.3.1",
+	"lldpLocChassisId":        "1.0.8802.1.1.2.1.3.2",
+	"lldpRemChassisIdSubtype": "1.0.8802.1.1.2.1.4.1.1.4",
+	"lldpRemChassisId":        "1.0.8802.1.1.2.1.4.1.1.5",
+	// lldpRemManAddrTable: the index carries the address
+	// (timeMark.localPort.remIndex.addrSubtype.addrLen.addr...)
+	"lldpRemManAddrIfSubtype": "1.0.8802.1.1.2.1.4.2.1.3",
+	"lldpLocPortIdSubtype":    "1.0.8802.1.1.2.1.3.7.1.2",
+	"lldpLocPortId":           "1.0.8802.1.1.2.1.3.7.1.3",
+	"lldpLocPortDesc":         "1.0.8802.1.1.2.1.3.7.1.4",
+	"lldpRemPortId":           "1.0.8802.1.1.2.1.4.1.1.7",
+	"lldpRemPortDesc":         "1.0.8802.1.1.2.1.4.1.1.8",
+	"lldpRemSysName":          "1.0.8802.1.1.2.1.4.1.1.9",
+	"lldpRemSysCapEnabled":    "1.0.8802.1.1.2.1.4.1.1.12",
 
 	// BRIDGE-MIB
-	"dot1dBasePortIfIndex": "1.3.6.1.2.1.17.1.4.1.2",
+	"dot1dBaseBridgeAddress": "1.3.6.1.2.1.17.1.1",
+	"dot1dBasePortIfIndex":   "1.3.6.1.2.1.17.1.4.1.2",
+	// Learned MAC addresses: dot1dTpFdbPort is indexed by the MAC, dot1qTpFdbPort
+	// by fdbId.MAC (the bridge port number is the value).
+	"dot1dTpFdbPort": "1.3.6.1.2.1.17.4.3.1.2",
+	"dot1qTpFdbPort": "1.3.6.1.2.1.17.7.1.2.2.1.2",
 
 	// TPLINK-DOT1Q-VLAN-MIB (JetStream/Omada switches without Q-BRIDGE); names
 	// are ERS-Proxy's own. Port table index = ifIndex, VLAN table index = VLAN ID.
@@ -131,7 +143,7 @@ var Objects = map[string]string{
 // Scalar reports whether a name is a scalar object (read with ".0").
 func Scalar(name string) bool {
 	switch name {
-	case "sysDescr", "sysObjectID", "sysUpTime", "sysName", "sysLocation", "rcSysVersion", "rcChasSerialNumber",
+	case "sysDescr", "sysObjectID", "sysUpTime", "sysName", "sysLocation", "lldpLocChassisIdSubtype", "lldpLocChassisId", "dot1dBaseBridgeAddress", "rcSysVersion", "rcChasSerialNumber",
 		"mtxrSerialNumber", "mtxrFirmwareVersion", "gwnProductModel", "gwnFirmwareVersion":
 		return true
 	}
