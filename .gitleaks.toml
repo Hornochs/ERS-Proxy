@@ -1,0 +1,13 @@
+# gitleaks configuration: the default rules, minus third-party code whose
+# constants and minified identifiers look like keys to the generic rule.
+title = "ERS-Proxy"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Third-party code: frozen x/crypto/ssh copy (internal/legacyssh) and vendored xterm.js"
+paths = [
+  '''^internal/legacyssh/''',
+  '''^internal/web/static/vendor/''',
+]
