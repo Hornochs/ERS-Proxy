@@ -327,3 +327,53 @@ func TestLogout(t *testing.T) {
 		t.Fatalf("logins %d logouts %d, want 2 and 1", f.logins, f.logouts)
 	}
 }
+
+// Address tables over EDM: the index comes as "indexNA" (vlan.mac or mac);
+// VOSS fails the standard tables and answers the RAPID-CITY one.
+func TestFDBTablesOverEDM(t *testing.T) {
+	var reqs []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			if r.Method == http.MethodGet {
+				http.SetCookie(w, &http.Cookie{Name: "auth", Value: "nonce1"})
+				_, _ = w.Write([]byte(`<form method="POST" name="submitForm" onSubmit="encode_vrf()">`))
+				return
+			}
+			_, _ = w.Write([]byte("EDM"))
+		case "/jsp/getTableMibs.jsp":
+			_ = r.ParseForm()
+			vn := r.Form.Get("varNames")
+			reqs = append(reqs, vn)
+			switch vn {
+			case "indexNA,dot1qTpFdbPort,dot1qTpFdbStatus", "indexNA,dot1dTpFdbPort,dot1dTpFdbStatus":
+				_, _ = w.Write([]byte("[['No_Error','Oid_Conversion_Fail','Oid_Conversion_Fail']]"))
+			case "indexNA,rcBridgeTpFdbPort,rcBridgeTpFdbStatus":
+				_, _ = w.Write([]byte("[['100.36.47.208.236.201.96','239','3'],['100.132.131.113.247.84.128','111','4'],['1.2.3','5','3']]"))
+			case "ifIndex,ifPhysAddress":
+				_, _ = w.Write([]byte("[['192','0x84:83:71:f7:54:00'],['193','0x84:83:71:f7:54:01']]"))
+			default:
+				_, _ = w.Write([]byte("[]"))
+			}
+		}
+	}))
+	defer srv.Close()
+	r := edmsrc.Reader{S: edmsrc.NewSession(&http.Transport{}, srv.URL, "u", "p")}
+	ctx := context.Background()
+	q, err := r.Columns(ctx, "dot1qTpFdbPort", "dot1qTpFdbStatus")
+	if err != nil || len(q) != 0 {
+		t.Fatalf("Q-BRIDGE %v %v", q, err)
+	}
+	rc, err := r.Columns(ctx, "rcBridgeTpFdbPort", "rcBridgeTpFdbStatus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := rc["100.36.47.208.236.201.96"]
+	if len(rc) != 2 || row["rcBridgeTpFdbPort"].Int != 239 || row["rcBridgeTpFdbStatus"].Int != 3 {
+		t.Errorf("rc table %+v", rc)
+	}
+	mac, err := r.Columns(ctx, "ifPhysAddress")
+	if err != nil || len(mac["193"]["ifPhysAddress"].Bytes) != 6 || mac["193"]["ifPhysAddress"].Bytes[5] != 1 {
+		t.Errorf("ifPhysAddress %+v %v", mac, err)
+	}
+}

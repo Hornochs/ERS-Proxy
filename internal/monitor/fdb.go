@@ -45,16 +45,25 @@ type fdbTable struct {
 }
 
 // fdb reads dot1qTpFdbPort (index fdbId.mac, fdbId taken as VLAN ID) and
-// dot1dTpFdbPort (index mac). Q-BRIDGE is used unless it is empty or has
+// dot1dTpFdbPort (index mac, or vlan.mac on TP-Link JetStream); when both
+// have no entries, rcBridgeTpFdbPort (VOSS over EDM). It also reads the
+// device's own interface MACs. Q-BRIDGE is used unless it is empty or has
 // entries on unknown bridge ports; then BRIDGE-MIB is read as well and the
 // table with fewer unknown ports wins (TP-Link JetStream reports port numbers
 // in Q-BRIDGE but ifIndexes in dot1dBasePortIfIndex). Failures only add a note.
 // The rules follow LANLeecher's FDB reader, which was checked on hardware.
 func (b *Base) fdb(ctx context.Context, r Reader) {
+	b.ownMACs(ctx, r)
 	q := b.fdbTable(ctx, r, "dot1qTpFdbPort", "dot1qTpFdbStatus")
 	best := q
 	if q.err != nil || len(q.entries) == 0 || q.unmapped > 0 {
 		d := b.fdbTable(ctx, r, "dot1dTpFdbPort", "dot1dTpFdbStatus")
+		if len(q.entries) == 0 && len(d.entries) == 0 {
+			// VOSS over EDM knows only RAPID-CITY's table.
+			if rc := b.fdbTable(ctx, r, "rcBridgeTpFdbPort", "rcBridgeTpFdbStatus"); rc.err == nil && len(rc.entries) > 0 {
+				q, d, best = rc, fdbTable{}, rc
+			}
+		}
 		qOK := q.err == nil && len(q.entries) > 0
 		if d.err == nil && len(d.entries) > 0 && (!qOK || d.unmapped < q.unmapped) {
 			best = d
@@ -92,7 +101,8 @@ func (b *Base) fdb(ctx context.Context, r Reader) {
 	b.Snap.FDBTime = b.Snap.Time
 }
 
-// fdbTable reads one address table. Entries with status invalid, self or
+// fdbTable reads one address table. rcBridgeTpFdbPort holds ifIndexes, the
+// other two bridge port numbers. Entries with status invalid, self or
 // mgmt, multicast and all-zero addresses are left out. A bridge port is
 // mapped through dot1dBasePortIfIndex; when the switch has no such table, the
 // bridge port is taken as ifIndex if the switch has that interface.
@@ -105,13 +115,12 @@ func (b *Base) fdbTable(ctx context.Context, r Reader, portCol, statusCol string
 	for idx, row := range t {
 		parts := Ints(idx)
 		vlan := 0
-		if portCol == "dot1qTpFdbPort" {
-			if len(parts) != 7 {
-				continue
-			}
+		switch {
+		case len(parts) == 7:
+			// Q-BRIDGE always; BRIDGE-MIB on TP-Link JetStream (T1500G), which
+			// puts the VLAN in front of the MAC like Q-BRIDGE.
 			vlan, parts = parts[0], parts[1:]
-		}
-		if len(parts) != 6 {
+		case len(parts) != 6 || portCol != "dot1dTpFdbPort":
 			continue
 		}
 		mac := make([]byte, 6)
@@ -132,6 +141,9 @@ func (b *Base) fdbTable(ctx context.Context, r Reader, portCol, statusCol string
 			continue
 		}
 		ifIndex, known := b.BridgePorts[bp]
+		if portCol == "rcBridgeTpFdbPort" {
+			ifIndex, known = bp, true
+		}
 		if !known {
 			if len(b.BridgePorts) > 0 || b.Snap.Port(bp) == nil {
 				out.unmapped++
@@ -142,4 +154,30 @@ func (b *Base) fdbTable(ctx context.Context, r Reader, portCol, statusCol string
 		out.entries = append(out.entries, FDBEntry{MAC: FormatMAC(mac), VLAN: vlan, IfIndex: ifIndex})
 	}
 	return out
+}
+
+// ownMACs reads ifPhysAddress into Snap.OwnMACs: unicast, not all-zero, each
+// once, sorted. Failures are ignored (the chassis ID still identifies the
+// device).
+func (b *Base) ownMACs(ctx context.Context, r Reader) {
+	t, err := r.Columns(ctx, "ifPhysAddress")
+	if err != nil {
+		return
+	}
+	seen := map[string]bool{}
+	for _, row := range t {
+		v, ok := row["ifPhysAddress"]
+		if !ok || v.Kind != KindBytes || len(v.Bytes) != 6 || v.Bytes[0]&1 == 1 {
+			continue
+		}
+		if m := FormatMAC(v.Bytes); m != "00:00:00:00:00:00" {
+			seen[m] = true
+		}
+	}
+	macs := make([]string, 0, len(seen))
+	for m := range seen {
+		macs = append(macs, m)
+	}
+	sort.Strings(macs)
+	b.Snap.OwnMACs = macs
 }

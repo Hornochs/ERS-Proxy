@@ -33,6 +33,7 @@ var Objects = map[string]string{
 	"ifHCOutOctets":              "1.3.6.1.2.1.31.1.1.1.10",
 	"ifHighSpeed":                "1.3.6.1.2.1.31.1.1.1.15",
 	"ifAlias":                    "1.3.6.1.2.1.31.1.1.1.18",
+	"ifPhysAddress":              "1.3.6.1.2.1.2.2.1.6",
 	"ifCounterDiscontinuityTime": "1.3.6.1.2.1.31.1.1.1.19",
 
 	// EtherLike-MIB
@@ -74,6 +75,10 @@ var Objects = map[string]string{
 	// Their status: 3 learned, 2 invalid, 4 self, 5 mgmt (static).
 	"dot1dTpFdbStatus": "1.3.6.1.2.1.17.4.3.1.3",
 	"dot1qTpFdbStatus": "1.3.6.1.2.1.17.7.1.2.2.1.3",
+	// RAPID-CITY rcBridgeTpFdbTable (VOSS; index vlan.MAC, the value is an
+	// ifIndex). VOSS's EDM has no other address table.
+	"rcBridgeTpFdbStatus": "1.3.6.1.4.1.2272.1.14.20.1.3",
+	"rcBridgeTpFdbPort":   "1.3.6.1.4.1.2272.1.14.20.1.4",
 
 	// TPLINK-DOT1Q-VLAN-MIB (JetStream/Omada switches without Q-BRIDGE); names
 	// are ERS-Proxy's own. Port table index = ifIndex, VLAN table index = VLAN ID.

@@ -242,12 +242,24 @@ func BulkWalkLimited(g *gosnmp.GoSNMP, root string) ([]gosnmp.SnmpPDU, error) {
 	return pdus, nil
 }
 
+// isNotIncreasing reports gosnmp's error for an agent that answered a walk
+// with an OID that is not after the previous one.
+func isNotIncreasing(err error) bool {
+	return strings.Contains(err.Error(), "OID not increasing")
+}
+
 // WalkColumn walks a table column and returns rows with parsed indexes.
 // A missing column ("no such object") yields no rows and no error. More than
-// MaxWalkRows values end the walk with ErrTooManyRows.
+// MaxWalkRows values end the walk with ErrTooManyRows. A walk the agent
+// answers out of order is tried once more.
 func WalkColumn(g *gosnmp.GoSNMP, column string) ([]Row, error) {
 	prefix := "." + strings.TrimPrefix(column, ".")
 	pdus, err := BulkWalkLimited(g, prefix)
+	if err != nil && isNotIncreasing(err) {
+		// Some agents (TP-Link T1500G, address tables) now and then answer
+		// out of order while the table changes; a second walk usually works.
+		pdus, err = BulkWalkLimited(g, prefix)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -133,3 +133,75 @@ func TestFDBWithoutBridgePortTable(t *testing.T) {
 		t.Errorf("FDB %+v", b.Snap.FDB)
 	}
 }
+
+// TP-Link T1500G-8T (seen on hardware, 2026-11-17): Q-BRIDGE has port
+// numbers, dot1dBasePortIfIndex and dot1dTpFdbPort have ifIndexes, and
+// dot1dTpFdbTable is indexed by vlan.mac like Q-BRIDGE.
+func TestFDBBridgeMIBWithVLANIndex(t *testing.T) {
+	b := &Base{Snap: &Snapshot{Time: time.Now()}, BridgePorts: map[int]int{49153: 49153, 49160: 49160}}
+	r := &fakeReader{tables: map[string]Table{
+		"dot1qTpFdbPort": {"100.2.0.0.0.1.1": row("dot1qTpFdbPort", 8), "7.2.0.0.0.1.2": row("dot1qTpFdbPort", 1)},
+		"dot1dTpFdbPort": {"100.2.0.0.0.1.1": row("dot1dTpFdbPort", 49160), "7.2.0.0.0.1.2": row("dot1dTpFdbPort", 49153)},
+	}}
+	b.fdb(context.Background(), r)
+	want := []FDBEntry{{MAC: "02:00:00:00:01:01", VLAN: 100, IfIndex: 49160}, {MAC: "02:00:00:00:01:02", VLAN: 7, IfIndex: 49153}}
+	if fmt.Sprint(b.Snap.FDB) != fmt.Sprint(want) {
+		t.Errorf("FDB %+v, want %+v", b.Snap.FDB, want)
+	}
+}
+
+func TestFDBReadsOwnMACs(t *testing.T) {
+	mac := func(b ...byte) Row { return Row{"ifPhysAddress": Value{Kind: KindBytes, Bytes: b}} }
+	b := &Base{Snap: &Snapshot{Time: time.Now()}}
+	r := &fakeReader{tables: map[string]Table{"ifPhysAddress": {
+		"1":  mac(0x84, 0x83, 0x71, 0xf7, 0x54, 0x2f),
+		"2":  mac(0x84, 0x83, 0x71, 0xf7, 0x54, 0x2f), // same MAC on two interfaces
+		"3":  mac(0x84, 0x83, 0x71, 0xf7, 0x54, 0x80),
+		"4":  mac(0, 0, 0, 0, 0, 0),          // loopback
+		"5":  mac(),                          // no address
+		"6":  mac(0x01, 0x80, 0xc2, 0, 0, 0), // multicast
+		"7":  mac(1, 2, 3),                   // not a MAC
+		"99": {"ifPhysAddress": Value{Kind: KindInt, Int: 5}},
+	}}}
+	b.fdb(context.Background(), r)
+	if want := []string{"84:83:71:f7:54:2f", "84:83:71:f7:54:80"}; fmt.Sprint(b.Snap.OwnMACs) != fmt.Sprint(want) {
+		t.Errorf("own MACs %v, want %v", b.Snap.OwnMACs, want)
+	}
+}
+
+func TestZeroBaseMACIsEmpty(t *testing.T) {
+	r := &scalarReader{v: map[string]Value{"dot1dBaseBridgeAddress": {Kind: KindBytes, Bytes: make([]byte, 6)}}}
+	var sys System
+	readIdentity(context.Background(), r, &sys)
+	if sys.BaseMAC != "" {
+		t.Errorf("base MAC %q, want empty", sys.BaseMAC)
+	}
+}
+
+type scalarReader struct{ v map[string]Value }
+
+func (s *scalarReader) Scalars(context.Context, ...string) (map[string]Value, error) { return s.v, nil }
+func (s *scalarReader) Columns(context.Context, ...string) (Table, error)            { return Table{}, nil }
+
+// VOSS over EDM (2026-11-17): Q-BRIDGE and BRIDGE-MIB read as empty, the
+// RAPID-CITY table answers with vlan.mac and ifIndex values; self entries
+// are left out.
+func TestFDBRapidCityFallback(t *testing.T) {
+	b := &Base{Snap: &Snapshot{Time: time.Now(), Ports: []*Port{{IfIndex: 239}}}, BridgePorts: map[int]int{48: 239}}
+	r := &fakeReader{tables: map[string]Table{
+		"rcBridgeTpFdbPort":   {"100.2.0.0.0.1.1": row("rcBridgeTpFdbPort", 239), "100.132.131.113.247.84.128": row("rcBridgeTpFdbPort", 111)},
+		"rcBridgeTpFdbStatus": {"100.2.0.0.0.1.1": row("rcBridgeTpFdbStatus", 3), "100.132.131.113.247.84.128": row("rcBridgeTpFdbStatus", 4)},
+	}}
+	b.fdb(context.Background(), r)
+	want := []FDBEntry{{MAC: "02:00:00:00:01:01", VLAN: 100, IfIndex: 239}}
+	if fmt.Sprint(b.Snap.FDB) != fmt.Sprint(want) || len(b.Snap.Notes) != 0 {
+		t.Errorf("FDB %+v notes %v, want %+v", b.Snap.FDB, b.Snap.Notes, want)
+	}
+	// Not read when Q-BRIDGE has entries.
+	b = &Base{Snap: &Snapshot{Time: time.Now()}, BridgePorts: map[int]int{1: 101}}
+	r.tables["dot1qTpFdbPort"] = Table{"1.2.0.0.0.1.9": row("dot1qTpFdbPort", 1)}
+	b.fdb(context.Background(), r)
+	if len(b.Snap.FDB) != 1 || b.Snap.FDB[0].IfIndex != 101 {
+		t.Errorf("FDB %+v", b.Snap.FDB)
+	}
+}

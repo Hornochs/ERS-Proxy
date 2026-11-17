@@ -316,6 +316,7 @@ func (p *Poller) process(ctx context.Context, d *store.Device, start time.Time, 
 type fdbState struct {
 	requested time.Time
 	entries   []monitor.FDBEntry
+	own       []string
 	time      time.Time
 }
 
@@ -328,11 +329,11 @@ func (f *fdbState) due(now time.Time) bool {
 // table into a snapshot that has none.
 func (f *fdbState) carry(snap *monitor.Snapshot) {
 	if !snap.FDBTime.IsZero() {
-		f.entries, f.time = snap.FDB, snap.FDBTime
+		f.entries, f.own, f.time = snap.FDB, snap.OwnMACs, snap.FDBTime
 		return
 	}
 	if !f.time.IsZero() {
-		snap.FDB, snap.FDBTime = f.entries, f.time
+		snap.FDB, snap.OwnMACs, snap.FDBTime = f.entries, f.own, f.time
 	}
 }
 

@@ -37,11 +37,17 @@ type Table struct {
 	// returns nothing when they are requested; like EDM, the reader then asks
 	// for the pseudo column "indexNA", which carries the instance ("a.b.c").
 	NAIndex bool
+	// IndexLen is the number of sub-identifiers of an NAIndex instance when
+	// it differs from len(Index): a MAC address index has six.
+	IndexLen int
 }
 
 // Tables lists the tables the EDM reader can read. Objects not listed here
-// (Q-BRIDGE, POWER-ETHERNET, EtherLike duplex) are not available through EDM
-// on ERS firmware and read as empty.
+// (POWER-ETHERNET, EtherLike duplex) are not available through EDM on ERS
+// firmware and read as empty. The address tables (checked on hardware,
+// 2026-11-17): ERS answers dot1qTpFdbTable and dot1dTpFdbTable with
+// "indexNA"; VOSS answers neither (Oid_Conversion_Fail) but
+// rcBridgeTpFdbTable, whose port column is an ifIndex.
 var Tables = []Table{
 	{Index: []string{"ifIndex"}, Columns: []string{"ifDescr", "ifType", "ifSpeed", "ifAdminStatus", "ifOperStatus",
 		"ifLastChange", "ifInOctets", "ifInDiscards", "ifInErrors", "ifOutOctets", "ifOutDiscards", "ifOutErrors"}},
@@ -57,6 +63,12 @@ var Tables = []Table{
 	{Index: []string{"rcVlanPortIndex"}, Columns: []string{"rcVlanPortDefaultVlanId", "rcVlanPortPerformTagging", "rcVlanPortUntagDefaultVlan"}},
 	{Index: []string{"rcPortIndex"}, Columns: []string{"rcPortOperDuplex", "rcPortOperSpeed"}},
 	{Index: []string{"rcMltId"}, Columns: []string{"rcMltName", "rcMltPortMembers"}},
+	{Index: []string{"ifIndex"}, Columns: []string{"ifPhysAddress"}},
+	{Index: []string{"dot1qFdbId", "dot1qTpFdbAddress"}, Columns: []string{"dot1qTpFdbPort", "dot1qTpFdbStatus"},
+		NAIndex: true, IndexLen: 7},
+	{Index: []string{"dot1dTpFdbAddress"}, Columns: []string{"dot1dTpFdbPort", "dot1dTpFdbStatus"}, NAIndex: true, IndexLen: 6},
+	{Index: []string{"rcBridgeTpFdbVlanId", "rcBridgeTpFdbAddress"}, Columns: []string{"rcBridgeTpFdbPort", "rcBridgeTpFdbStatus"},
+		NAIndex: true, IndexLen: 7},
 	{Index: []string{"s5ChasComGrpIndx", "s5ChasComIndx", "s5ChasComSubIndx"}, Columns: []string{"s5ChasComType",
 		"s5ChasComDescr", "s5ChasComVer", "s5ChasComSerNum", "s5ChasComRunningSoftwareVer"}},
 }
@@ -72,7 +84,9 @@ var kinds = map[string]monitor.Kind{
 	"dot1dBasePortIfIndex": monitor.KindInt, "dot3adAggPortAttachedAggID": monitor.KindInt, "lldpLocPortIdSubtype": monitor.KindInt,
 	"rcVlanType": monitor.KindInt, "rcVlanStgId": monitor.KindInt, "rcVlanPortDefaultVlanId": monitor.KindInt, "rcVlanPortPerformTagging": monitor.KindInt, "rcVlanPortUntagDefaultVlan": monitor.KindInt, "rcPortOperDuplex": monitor.KindInt,
 	"rcPortOperSpeed": monitor.KindUint,
-	"ifIndex":         monitor.KindInt, "dot1dBasePort": monitor.KindInt, "dot3adAggPortIndex": monitor.KindInt, "lldpLocPortNum": monitor.KindInt,
+	"dot1qTpFdbPort":  monitor.KindInt, "dot1qTpFdbStatus": monitor.KindInt, "dot1dTpFdbPort": monitor.KindInt,
+	"dot1dTpFdbStatus": monitor.KindInt, "rcBridgeTpFdbPort": monitor.KindInt, "rcBridgeTpFdbStatus": monitor.KindInt,
+	"ifIndex": monitor.KindInt, "dot1dBasePort": monitor.KindInt, "dot3adAggPortIndex": monitor.KindInt, "lldpLocPortNum": monitor.KindInt,
 	"lldpRemTimeMark": monitor.KindUint, "lldpRemLocalPortNum": monitor.KindInt, "lldpRemIndex": monitor.KindInt,
 	"rcVlanId": monitor.KindInt, "rcVlanPortIndex": monitor.KindInt, "rcPortIndex": monitor.KindInt, "rcMltId": monitor.KindInt,
 	"s5ChasComGrpIndx": monitor.KindInt, "s5ChasComIndx": monitor.KindInt, "s5ChasComSubIndx": monitor.KindInt,
@@ -81,7 +95,7 @@ var kinds = map[string]monitor.Kind{
 // binary objects: "0x.." / "aa:bb" answers are decoded as hex.
 var binary = map[string]bool{
 	"rcVlanPortMembers": true, "rcMltPortMembers": true, "lldpRemSysCapEnabled": true,
-	"lldpRemPortId": true, "lldpLocPortId": true,
+	"lldpRemPortId": true, "lldpLocPortId": true, "ifPhysAddress": true,
 }
 
 // Session is the reader's view of a device's EDM session: the shared transport
@@ -215,7 +229,7 @@ func (r Reader) Columns(ctx context.Context, names ...string) (monitor.Table, er
 			if t.NAIndex {
 				idx = strings.Split(strings.TrimPrefix(row[0], "."), ".")
 			}
-			if len(idx) != len(t.Index) {
+			if want := t.IndexLen; len(idx) != len(t.Index) && (want == 0 || len(idx) != want) {
 				continue
 			}
 			ok := true
