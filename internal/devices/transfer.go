@@ -91,6 +91,42 @@ func WriteJSON(w io.Writer, e *Export) error {
 // csvHeader is the column order of CSV exports and imports.
 var csvHeader = []string{"name", "group", "kind", "url", "open_mode", "notes"}
 
+// csvDangerous reports whether a spreadsheet would read a cell starting with c
+// as a formula.
+func csvDangerous(c byte) bool {
+	switch c {
+	case '=', '+', '-', '@', '\t', '\r':
+		return true
+	}
+	return false
+}
+
+// csvEscape protects a text cell against formula injection when the export is
+// opened in a spreadsheet: a cell that starts with a formula character (after
+// any single quotes already there) gets a single quote in front. All exported
+// columns are text (names, groups, URLs, notes), so a legitimate value such
+// as "-5" is simply exported as "'-5" and restored by csvUnescape; there are
+// no numeric columns that would need the plain form.
+func csvEscape(v string) string {
+	t := strings.TrimLeft(v, "'")
+	if t != "" && csvDangerous(t[0]) {
+		return "'" + v
+	}
+	return v
+}
+
+// csvUnescape reverses csvEscape for the same columns: one leading quote is
+// removed when the rest, after any further quotes, starts with a formula
+// character. Other values starting with a quote are left alone.
+func csvUnescape(v string) string {
+	if strings.HasPrefix(v, "'") {
+		if t := strings.TrimLeft(v, "'"); t != "" && csvDangerous(t[0]) {
+			return v[1:]
+		}
+	}
+	return v
+}
+
 // WriteCSV writes the devices of an export as CSV (a simple subset).
 func WriteCSV(w io.Writer, e *Export) error {
 	cw := csv.NewWriter(w)
@@ -98,7 +134,8 @@ func WriteCSV(w io.Writer, e *Export) error {
 		return err
 	}
 	for _, d := range e.Devices {
-		if err := cw.Write([]string{d.Name, d.Group, d.Kind, d.URL, d.OpenMode, d.Notes}); err != nil {
+		if err := cw.Write([]string{csvEscape(d.Name), csvEscape(d.Group), csvEscape(d.Kind), csvEscape(d.URL),
+			csvEscape(d.OpenMode), csvEscape(d.Notes)}); err != nil {
 			return err
 		}
 	}
@@ -145,7 +182,7 @@ func ReadCSV(r io.Reader) (*Export, error) {
 	}
 	col := func(row []string, name string) string {
 		if i, ok := idx[name]; ok && i < len(row) {
-			return strings.TrimSpace(row[i])
+			return csvUnescape(strings.TrimSpace(row[i]))
 		}
 		return ""
 	}

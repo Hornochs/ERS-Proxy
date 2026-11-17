@@ -522,3 +522,38 @@ func TestNormalizeRouterOS(t *testing.T) {
 		t.Errorf("snmp source on routeros: %v", err)
 	}
 }
+
+func TestCSVFormulaEscapeRoundTrip(t *testing.T) {
+	names := []string{"=1+1", "+cmd", "-5", "@SUM(A1)", "\t=x", "'=quoted", "''-x", "plain", "'plain", "a=b", "x-y"}
+	in := &Export{Version: ExportVersion}
+	for _, n := range names {
+		in.Devices = append(in.Devices, ExportDevice{Name: n, Kind: store.KindLink, URL: "https://x.example/", Notes: n})
+	}
+	var buf bytes.Buffer
+	if err := WriteCSV(&buf, in); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(buf.String(), "\n")[1:] {
+		if line == "" {
+			continue
+		}
+		if c := line[0]; c == '=' || c == '+' || c == '-' || c == '@' || c == '\t' || c == '\r' {
+			t.Errorf("unprotected cell in %q", line)
+		}
+	}
+	if !strings.Contains(buf.String(), "'=1+1,") || !strings.Contains(buf.String(), "'-5,") {
+		t.Errorf("missing quote prefix:\n%s", buf.String())
+	}
+	out, err := ReadCSV(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Devices) != len(names) {
+		t.Fatalf("%d devices", len(out.Devices))
+	}
+	for i, n := range names {
+		if got := out.Devices[i]; got.Name != n || got.Notes != n {
+			t.Errorf("%q came back as name %q notes %q", n, got.Name, got.Notes)
+		}
+	}
+}
