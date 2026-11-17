@@ -54,6 +54,13 @@ type Base struct {
 	BridgePorts map[int]int
 }
 
+// Bounds for what an agent may report: interface indexes 1 to MaxIfIndex and
+// at most MaxPorts interfaces per device.
+const (
+	MaxIfIndex = 65535
+	MaxPorts   = 2048
+)
+
 var ifColumns = []string{
 	"ifDescr", "ifType", "ifSpeed", "ifAdminStatus", "ifOperStatus", "ifLastChange",
 	"ifInOctets", "ifOutOctets", "ifInErrors", "ifOutErrors", "ifInDiscards", "ifOutDiscards",
@@ -74,8 +81,8 @@ func CollectBase(ctx context.Context, r Reader, opts BaseOptions) (*Base, error)
 	}
 	for idx, row := range ifs {
 		ifIndex, err := strconv.Atoi(idx)
-		if err != nil {
-			continue
+		if err != nil || ifIndex < 1 || ifIndex > MaxIfIndex {
+			continue // not a plausible interface index: ignore the row
 		}
 		p := &Port{IfIndex: ifIndex, Descr: row["ifDescr"].String(), Name: row["ifName"].String(), Alias: row["ifAlias"].String()}
 		p.Type, _ = row["ifType"].AsInt()
@@ -119,6 +126,10 @@ func CollectBase(ctx context.Context, r Reader, opts BaseOptions) (*Base, error)
 		return nil, fmt.Errorf("the device returned no interfaces")
 	}
 	sort.Slice(snap.Ports, func(i, j int) bool { return snap.Ports[i].IfIndex < snap.Ports[j].IfIndex })
+	if len(snap.Ports) > MaxPorts {
+		snap.Ports = snap.Ports[:MaxPorts]
+		snap.Notes = append(snap.Notes, fmt.Sprintf("the device reports more than %d interfaces; only the first %d are shown", MaxPorts, MaxPorts))
+	}
 	b := &Base{Snap: snap, BridgePorts: map[int]int{}}
 
 	if t, err := r.Columns(ctx, "dot1dBasePortIfIndex"); err == nil {

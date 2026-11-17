@@ -2,6 +2,7 @@ package snmp_test
 
 import (
 	"context"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -35,6 +36,18 @@ func TestSimulator(t *testing.T) {
 	}
 	if len(rows) != 2 || snmp.String(rows[0].PDU) != "Port 1" || rows[1].Index[0] != 2 {
 		t.Fatalf("ifDescr rows: %+v", rows)
+	}
+
+	// A walk that returns more rows than allowed ends with an error.
+	old := snmp.MaxWalkRows
+	snmp.MaxWalkRows = 1
+	defer func() { snmp.MaxWalkRows = old }()
+	if _, err := snmp.WalkColumn(g, "1.3.6.1.2.1.2.2.1.2"); !errors.Is(err, snmp.ErrTooManyRows) {
+		t.Fatalf("walk over the row limit: %v", err)
+	}
+	snmp.MaxWalkRows = 2
+	if rows, err := snmp.WalkColumn(g, "1.3.6.1.2.1.2.2.1.2"); err != nil || len(rows) != 2 {
+		t.Fatalf("walk at the row limit: %d rows, %v", len(rows), err)
 	}
 }
 

@@ -32,6 +32,9 @@ type portKey struct {
 	ifIndex int
 }
 
+// maxPrev is the most remembered error counters: 2048 ports for 64 devices.
+const maxPrev = 64 * 2048
+
 type errCounters struct{ in, out uint64 }
 
 // Recorder is a poller.Sink that stores history.
@@ -59,11 +62,13 @@ func (r *Recorder) Samples(ctx context.Context, deviceID int64, snap *monitor.Sn
 	ts := snap.Time.UTC().Truncate(time.Minute)
 	var out []store.Sample
 	r.mu.Lock()
+	seen := map[portKey]bool{}
 	for _, p := range snap.Ports {
 		if !p.Physical && !p.IsLAG {
 			continue
 		}
 		k := portKey{deviceID, p.IfIndex}
+		seen[k] = true
 		var inD, outD int64
 		if prev, ok := r.prev[k]; ok {
 			if p.InErrors >= prev.in {
@@ -83,6 +88,17 @@ func (r *Recorder) Samples(ctx context.Context, deviceID int64, snap *monitor.Sn
 			InAvg: p.InBps, InMax: p.InBps, OutAvg: p.OutBps, OutMax: p.OutBps,
 			UtilMax: p.Utilization, InErrors: inD, OutErrors: outD, UpFrac: up, N: 1,
 		})
+	}
+	// Bound prev by the ports actually present: forget the ports of this device
+	// that are gone, and start over should the map still grow beyond reason
+	// (devices removed from monitoring are never reported again).
+	for k := range r.prev {
+		if k.device == deviceID && !seen[k] {
+			delete(r.prev, k)
+		}
+	}
+	if len(r.prev) > maxPrev {
+		r.prev = map[portKey]errCounters{}
 	}
 	r.mu.Unlock()
 	return r.db.UpsertSamples(ctx, out)

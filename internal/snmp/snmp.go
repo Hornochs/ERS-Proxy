@@ -216,11 +216,38 @@ type Row struct {
 	PDU   gosnmp.SnmpPDU
 }
 
+// MaxWalkRows is the most values one walk collects. A device (or whatever
+// answers in its place) that returns more is treated as broken: the walk ends
+// with ErrTooManyRows instead of using up memory and time. A variable so that
+// tests can lower it.
+var MaxWalkRows = 20000
+
+// ErrTooManyRows is returned when a walk exceeds MaxWalkRows.
+var ErrTooManyRows = errors.New("the device returned too many rows")
+
+// BulkWalkLimited is gosnmp's BulkWalkAll with a row limit: it stops after
+// MaxWalkRows values and returns ErrTooManyRows.
+func BulkWalkLimited(g *gosnmp.GoSNMP, root string) ([]gosnmp.SnmpPDU, error) {
+	var pdus []gosnmp.SnmpPDU
+	err := g.BulkWalk(root, func(p gosnmp.SnmpPDU) error {
+		if len(pdus) >= MaxWalkRows {
+			return fmt.Errorf("%w (more than %d)", ErrTooManyRows, MaxWalkRows)
+		}
+		pdus = append(pdus, p)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return pdus, nil
+}
+
 // WalkColumn walks a table column and returns rows with parsed indexes.
-// A missing column ("no such object") yields no rows and no error.
+// A missing column ("no such object") yields no rows and no error. More than
+// MaxWalkRows values end the walk with ErrTooManyRows.
 func WalkColumn(g *gosnmp.GoSNMP, column string) ([]Row, error) {
 	prefix := "." + strings.TrimPrefix(column, ".")
-	pdus, err := g.BulkWalkAll(prefix)
+	pdus, err := BulkWalkLimited(g, prefix)
 	if err != nil {
 		return nil, err
 	}

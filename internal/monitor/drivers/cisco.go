@@ -108,6 +108,9 @@ func ciscoVLANs(ctx context.Context, r monitor.Reader, snap *monitor.Snapshot) (
 		snap.Notes = append(snap.Notes, "trunks: "+err.Error())
 	}
 	for idx, row := range trunks {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
 		parts := monitor.Ints(idx)
 		if len(parts) != 1 {
 			continue
