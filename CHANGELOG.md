@@ -109,6 +109,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data directory), documented in `docs/installation.md`, and a CI workflow that starts both
   and checks health and write access.
 
+### Fixed
+
+- **Network map:** a newly added device is placed on a free spot near the centre instead of
+  exactly on top of the previous one, where it looked as if it had not been added.
+
 ## [1.1.0] - 2026-11-07
 
 ### Added
