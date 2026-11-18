@@ -14,7 +14,7 @@
 
 services:
   ers-proxy:
-    # Pin a version tag (for example 1.1.0) for production.
+    # Pin a version tag (for example 1.2.0) for production.
     image: ghcr.io/lan-dot-party/ers-proxy:latest
     restart: unless-stopped
     ports:
