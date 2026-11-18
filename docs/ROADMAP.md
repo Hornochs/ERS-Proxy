@@ -13,7 +13,7 @@ then update this file, `architecture.md` and the changelog (see [CLAUDE.md](../C
 
 ## Current status
 
-_Last updated: 2026-11-17_
+_Last updated: 2026-11-18 (release 1.2.0)_
 
 | Phase | State |
 |---|---|
@@ -25,13 +25,16 @@ _Last updated: 2026-11-17_
 | 5 – Auto-login (experimental) | done (mock only) |
 | 6 – Hardware and 1.0 | in progress (6.1 done except stacks and SNMPv3 authPriv, which were skipped; next 6.2) |
 | 7 – Port dashboard | done (verified on ERS 5632FD, VSP 4850GTS, T1500G-8T, SG2210P, CRS305 with SwOS, CRS310 with RouterOS; stacks pending) |
-| 8 – Switch configuration | in progress on branch `switch-config` (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0 and a VSP 4850GTS with VOSS 7.1.10.0; open: SNMP channel; design in [switch-configuration.md](switch-configuration.md)) |
+| 8 – Switch configuration | in progress, in `main` since PR #6 (8.1–8.10 and 8.12 done; 8.11 partly: EDM channel verified on a VSP 8404 with VOSS 8.10.1.0 and a VSP 4850GTS with VOSS 7.1.10.0; open: SNMP channel; design in [switch-configuration.md](switch-configuration.md)) |
 | 9 – SSH console | in progress (9.1–9.3 done; 9.4: ERS 5632FD, CRS310 and VSP 4850GTS verified; VSP 8404 needs an SSH account) |
 | 10 – Network map | done (checked on the test network 2026-11-17: ERS 5632FD, two VSPs, three TP-Links, CRS310) |
 
-**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12 (branch `switch-config`); 8.11 partly (EDM channel on a VSP 8404 and a VSP 4850GTS); 9.1–9.3; 10.1–10.6.
+**Done:** 0.1–0.3, 1.1–1.5, 2.1–2.6, 3.1–3.6, 4.1–4.2, 5.1–5.2, 7.1–7.17, 8.1–8.10 and 8.12; 8.11 partly (EDM channel on a VSP 8404 and a VSP 4850GTS); 9.1–9.3; 10.1–10.6.
 
-**Next:** 6.2 – hardening, documentation and security review, release 1.0.0. Skipped in 6.1 by
+**Released:** 1.0.0 (2026-11-04), 1.1.0 (2026-11-07), 1.2.0 (2026-11-18: phases 9 and 10, steps
+2.6, 7.16 and 7.17, security hardening; see the changelog).
+
+**Next:** 6.2 – hardening, documentation and security review. Skipped in 6.1 by
 the maintainer (2026-11-17): a stack (numbering of units 2–8) and SNMPv3 with authPriv on a
 real switch. Still open on hardware: the SNMP channel of 8.11 (needs a write community), the
 SSH login on the VSP 8404 (needs an SSH account) and the SwOS address table (CRS305 offline).

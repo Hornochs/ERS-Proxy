@@ -3,36 +3,80 @@
 **One portal for the web interfaces of your switches – and a fix that makes the EDM of old
 Avaya/Extreme ERS switches work in today's browsers.**
 
-> Status: in development, see [docs/ROADMAP.md](docs/ROADMAP.md).
+> What changed in each release: [CHANGELOG.md](CHANGELOG.md). What comes next:
+> [docs/ROADMAP.md](docs/ROADMAP.md).
+
+![The workspace: devices on the left, the EDM of an ERS 5698 opened in a tab through the proxy](docs/images/workspace.png)
 
 ## What it does
+
+### One portal for all switch web interfaces
 
 - **Repairs EDM in modern browsers.** The Enterprise Device Manager built into ERS 5600 (and
   related ERS families) breaks in current Firefox, Chrome and Edge: Ext JS 2.2 reads response
   headers case-sensitively, modern browsers report them in lower case, and every request
   fails after the login. ERS-Proxy fetches EDM from the switch, fixes the affected files on
   the fly and serves them to your browser. Nothing is changed on the switch.
-- **All devices in one place.** Add your switches on the left – ERS and VSP switches and
-  MikroTik SwOS switches through the proxy (with automatic login), MikroTik RouterOS devices (WebFig through the proxy, the dashboard reads their REST API) and any other device (modern switches, firewalls, access points) as a direct link. Their
-  web interfaces open on the right in tabs, in a new browser tab or in a popup window; each
-  user and each device can choose. Devices can be added one by one, several at once (paste a
-  list from a spreadsheet) or imported from JSON/CSV.
-- **SSH console (optional).** Admins can open an SSH terminal for a device right in the
-  workspace – also on old Avaya ERS switches that only speak `ssh-dss` and SHA-1. Off unless
-  enabled in `config.yaml`.
+- **All devices in one place.** ERS and VSP switches and MikroTik SwOS switches open through
+  the proxy (with automatic login), MikroTik RouterOS devices show WebFig through the proxy,
+  and any other device (modern switches, firewalls, access points) is a direct link. Web
+  interfaces open on the right in tabs, in a new browser tab or in a popup window; each user
+  and each device can choose.
+- **Add many devices quickly.** One by one, several at once (a table form – paste rows from a
+  spreadsheet, shared settings such as type, group, monitoring and credentials apply to all) or
+  imported from JSON/CSV.
+
+### Network maps
+
+Place your switches on a floor plan and see the links between them with their live rates and
+utilisation. Links are found automatically from LLDP, else from the switches' MAC address
+tables, and can be drawn by hand; automatic links can be hidden. Everyone can view maps, admins
+edit them. Maps also open as tabs in the workspace. Details:
+[docs/monitoring.md](docs/monitoring.md#network-maps).
+
+![A network map on a floor plan: four switches, LLDP and manual links with live rates](docs/images/map.png)
+
+<details>
+<summary>The same map in the dark theme</summary>
+
+![The network map in the dark theme](docs/images/map-dark.png)
+
+</details>
+
+### Port dashboard
+
+Every port of every monitored switch at a glance: link, speed, duplex, VLANs, PoE, LAG, LLDP
+neighbour and traffic with history – read-only via SNMP, via the EDM interface on ERS and VSP
+switches, or via the web API of SwOS and the REST API of RouterOS. Vendors plug in as drivers
+(generic Q-BRIDGE, ERS, VSP/VOSS, Cisco, TP-Link, MikroTik SwOS and RouterOS). See
+[docs/monitoring.md](docs/monitoring.md).
+
+![The port dashboard: all monitored switches with their front panels](docs/images/dashboard.png)
+
+![One switch: stack units, front panel and the port table with live rates](docs/images/switch.png)
+
+### SSH console (optional)
+
+Admins can open an SSH terminal for a device right in the workspace – also on old Avaya ERS
+switches that only speak `ssh-dss` and SHA-1, through a separate legacy profile that is used
+for nothing else. Host keys are confirmed by fingerprint before a login is sent. Off unless
+enabled in `config.yaml`.
+
+![An SSH console to an ERS switch in a workspace tab, connected with the legacy profile](docs/images/ssh.png)
+
+### Change settings (optional, experimental)
+
+Off by default. With `configure.enabled` in `config.yaml`, admins can change port VLANs, port
+state and name, VLANs and PoE from the dashboard – VSP/VOSS first. Every change is previewed,
+applied "commit confirmed" and reverted automatically unless it is confirmed in time. See
+[docs/switch-configuration.md](docs/switch-configuration.md).
+
+### Safe by design and easy to run
+
 - **Safe by design.** Switch content runs in a browser sandbox and cannot reach the portal or
   other switches; switch cookies never reach the browser; stored switch passwords are
   encrypted; HTTPS to the switch works with the old TLS versions these devices speak, with
   certificate pinning instead of blind trust. See [docs/security.md](docs/security.md).
-- **Port dashboard.** Every port of every monitored switch at a glance: link, speed, duplex,
-  VLANs, PoE, LAG, LLDP neighbour and traffic with history – read-only via SNMP, via the EDM
-  interface on ERS and VSP switches, or via the web API of SwOS and the REST API of RouterOS. Vendors plug in as drivers (generic
-  Q-BRIDGE, ERS, VSP/VOSS, Cisco, TP-Link, MikroTik SwOS and RouterOS).
-- **Change settings (optional, experimental).** Off by default. With `configure.enabled` in
-  `config.yaml`, admins can change port VLANs, port state and name, VLANs and PoE from the
-  dashboard – VSP/VOSS first. Every change is previewed, applied "commit confirmed" and reverted
-  automatically unless it is confirmed in time. See
-  [docs/switch-configuration.md](docs/switch-configuration.md).
 - **Easy to run.** One static binary, SQLite, packages for Debian/Ubuntu, Fedora/RHEL, Arch and
   Alpine, and a Docker image. Works behind a reverse proxy on a single domain and port.
 
@@ -119,7 +163,7 @@ the "Device report" issue template – the diagnostics page shows what to paste.
 | [docs/installation.md](docs/installation.md) | Packages, Docker, first steps |
 | [docs/reverse-proxy.md](docs/reverse-proxy.md) | Nginx, Caddy, Apache |
 | [docs/compatibility.md](docs/compatibility.md) | Verified switches and firmware |
-| [docs/monitoring.md](docs/monitoring.md) | Port dashboard: enabling, testing, history, troubleshooting |
+| [docs/monitoring.md](docs/monitoring.md) | Port dashboard and network maps: enabling, testing, history, troubleshooting |
 | [docs/drivers.md](docs/drivers.md) | Writing a port dashboard driver for another vendor |
 | [docs/hardware-tests.md](docs/hardware-tests.md) | Checklist for verifying a switch model on real hardware |
 

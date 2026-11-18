@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-18
+
 ### Security
 
 - Build with Go 1.26 (toolchain 1.26.11, was 1.24.7) and current dependencies (chi 5.5,
@@ -35,6 +37,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings are reset.
 
 ### Changed
+
+- README: rewritten feature overview with screenshots of the workspace, the network map, the
+  port dashboard and the SSH console (`docs/images/`, taken from a demo setup).
 
 - Login lockout: 5 failures lock the pair of client address and username, 20 failures lock a
   client address that tries many usernames; a username is no longer locked for everyone, so
