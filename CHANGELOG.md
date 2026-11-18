@@ -6,6 +6,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- README: the screenshots are taken in the dark theme (also the floor plan behind the map); the map
+  has one image instead of a light and a dark one.
+
 ## [1.2.0] - 2026-11-18
 
 ### Security
