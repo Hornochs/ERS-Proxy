@@ -130,6 +130,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - "Open in EDM" for a port did nothing on ERS ports that are not copper ports: EDM names SFP,
   XFP, PoE and rear ports `Gbic_Port_`, `Fiber_Port_`, `Poe_Port_` and `Rear_Port_`.
 
+### Fixed
+
+- **Network map:** a newly added device is placed on a free spot near the centre instead of
+  exactly on top of the previous one, where it looked as if it had not been added.
+
 ## [1.1.0] - 2026-11-07
 
 ### Added
