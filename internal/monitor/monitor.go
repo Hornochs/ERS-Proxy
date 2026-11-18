@@ -216,6 +216,10 @@ type Snapshot struct {
 	// polls that did not read it.
 	FDB     []FDBEntry
 	FDBTime time.Time
+	// OwnMACs are the MAC addresses of the device's interfaces (ifPhysAddress),
+	// read together with the FDB: switches send frames from port and VLAN
+	// interface MACs, so other switches learn those rather than the chassis ID.
+	OwnMACs []string
 	// Notes lists things a driver could not determine (shown in diagnostics).
 	Notes []string
 }
@@ -367,6 +371,9 @@ func readIdentity(ctx context.Context, r Reader, sys *System) {
 		}
 		if sys.BaseMAC == "" {
 			sys.BaseMAC = NormalizeMAC(m.String())
+		}
+		if sys.BaseMAC == "00:00:00:00:00:00" {
+			sys.BaseMAC = "" // VOSS 7.1 answers dot1dBaseBridgeAddress with zeros
 		}
 	}
 }

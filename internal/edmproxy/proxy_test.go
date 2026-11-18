@@ -535,7 +535,7 @@ func TestOpenPortAndReuse(t *testing.T) {
 	logins := func() int { return e.mock.Requests["/"] } // requests have finished
 
 	base := openAt("/open/1?port=5")
-	if s := shim(base); !strings.Contains(s, `"x:port":"5"`) || !strings.Contains(s, `getElementById("Port_" + n)`) {
+	if s := shim(base); !strings.Contains(s, `"x:port":"5"`) || !strings.Contains(s, `"Port_", "Poe_Port_", "Gbic_Port_", "Fiber_Port_", "Rear_Port_"`) {
 		t.Fatalf("port not handed to the shim:\n%s", s)
 	}
 	n := logins()
