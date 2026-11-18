@@ -36,13 +36,6 @@ edit them. Maps also open as tabs in the workspace. Details:
 
 ![A network map on a floor plan: four switches, LLDP and manual links with live rates](docs/images/map.png)
 
-<details>
-<summary>The same map in the dark theme</summary>
-
-![The network map in the dark theme](docs/images/map-dark.png)
-
-</details>
-
 ### Port dashboard
 
 Every port of every monitored switch at a glance: link, speed, duplex, VLANs, PoE, LAG, LLDP

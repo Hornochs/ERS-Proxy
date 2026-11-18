@@ -38,8 +38,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- README: rewritten feature overview with screenshots of the workspace, the network map, the
-  port dashboard and the SSH console (`docs/images/`, taken from a demo setup).
+- README: rewritten feature overview with screenshots (dark theme) of the workspace, the network
+  map, the port dashboard and the SSH console (`docs/images/`, taken from a demo setup).
 
 - Login lockout: 5 failures lock the pair of client address and username, 20 failures lock a
   client address that tries many usernames; a username is no longer locked for everyone, so
